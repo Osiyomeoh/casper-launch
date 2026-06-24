@@ -1,6 +1,7 @@
 import { RpcClient, HttpHandler } from "casper-js-sdk";
 
 const RPC_ENDPOINTS = [
+  "https://node.testnet.casper.network/rpc",
   "https://rpc.mainnet.casperlabs.io/rpc",
   "https://casper-rpc.publicnode.com",
 ];

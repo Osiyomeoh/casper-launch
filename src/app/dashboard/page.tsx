@@ -8,24 +8,15 @@ import { useCasperWallet } from "@/lib/casper-wallet";
 const EXPLORER = "https://cspr.live";
 
 const LOG_POOL = [
-  { text: "INIT: Connecting to Casper mainnet RPC...", color: "text-white" },
-  { text: "OK: RPC node synced. Chain: casper", color: "text-[#64FFDA]" },
+  { text: "INIT: Connecting to Casper testnet RPC...", color: "text-white" },
+  { text: "OK: RPC node synced.", color: "text-[#64FFDA]" },
   { text: "FETCH: Pulling latest block and era data from chain...", color: "text-white" },
-  { text: "OK: Block confirmed. Compliance verification passed.", color: "text-[#64FFDA]" },
-  { text: "PROCESS: Scanning CEP-78 token metadata for Alpine Terrace...", color: "text-white" },
-  { text: "SUCCESS: Token holders: 1,000. All wallets KYC-verified.", color: "text-[#00C853]" },
-  { text: "EXEC: Queuing x402 yield batch for Q3 distribution.", color: "text-white font-bold" },
+  { text: "OK: Block confirmed.", color: "text-[#64FFDA]" },
+  { text: "FETCH: Querying yield contract pool balance...", color: "text-white" },
   { text: "OK: Oracle price feed synced. CSPR/USD updated.", color: "text-[#64FFDA]" },
-  { text: "PROCESS: Calculating yield split for 1,240 wallets...", color: "text-white" },
-  { text: "SUCCESS: $21,250.00 yield queued. Executing on-chain.", color: "text-[#00C853]" },
-  { text: "SCAN: Running KYC re-verification on 3 flagged wallets...", color: "text-white" },
-  { text: "OK: All wallets cleared. No AML flags detected.", color: "text-[#64FFDA]" },
-  { text: "MONITOR: Rental income inflow detected. Updating valuation oracle.", color: "text-white" },
-  { text: "SUCCESS: CEP-78 metadata updated on Casper mainnet.", color: "text-[#00C853]" },
-  { text: "PULSE: System nominal. Next distribution cycle in 3d 22h.", color: "text-[#64FFDA]" },
-  { text: "EXEC: x402 micropayment routed — Alpine Terrace Unit 3 → Investor 0x7a2.", color: "text-white" },
-  { text: "OK: Governance vote CP-142 quorum reached: 82%. Execution pending.", color: "text-[#64FFDA]" },
-  { text: "MONITOR: Staking rewards distributed. Blended APY: 8.1%.", color: "text-white" },
+  { text: "MONITOR: Yield agent polling — no distribution needed yet.", color: "text-white" },
+  { text: "OK: Contracts verified on testnet.", color: "text-[#64FFDA]" },
+  { text: "PULSE: System nominal. Awaiting yield deposits.", color: "text-[#64FFDA]" },
 ];
 
 type NetworkData = {
@@ -104,12 +95,13 @@ export default function DashboardPage() {
 
   // Fetch real CSPR balance when CasperWallet is connected
   useEffect(() => {
-    if (!casperWallet.publicKey) return;
-    fetch(`/api/casper/account?publicKey=${casperWallet.publicKey}`)
+    const pk = casperWallet.publicKey;
+    if (!pk) return;
+    fetch(`/api/casper/account?publicKey=${pk}`)
       .then((r) => r.json())
-      .then((d) => { if (!d.error) setCsprBalance(d.cspr); })
+      .then((d) => { if (typeof d.cspr === "number") setCsprBalance(d.cspr); })
       .catch(() => {});
-  }, [casperWallet.publicKey]);
+  }, [casperWallet.publicKey, casperWallet.isConnected]);
 
   // Terminal log streaming
   useEffect(() => {
