@@ -1,0 +1,14 @@
+[workspace]
+members = [
+    "rwa-nft",
+    "yield-distributor",
+    "governance",
+]
+resolver = "2"
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "z"
+panic = "abort"
+strip = "symbols"
