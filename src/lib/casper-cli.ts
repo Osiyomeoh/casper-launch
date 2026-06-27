@@ -15,6 +15,7 @@ import {
   TransactionEntryPoint,
   TransactionScheduling,
   TransactionTarget,
+  Hash,
   PaymentLimitedMode,
   PricingMode,
   Args,
@@ -74,7 +75,7 @@ export async function putTransaction(callArgs: ContractCallArgs): Promise<string
   const initiatorAddr = new InitiatorAddr(publicKey);
 
   const target = TransactionTarget.newTransactionTargetFromSession({
-    storedContractByHash: { hash: { hash: Buffer.from(contractHash, "hex") } },
+    storedContractByHash: { hash: { hash: Hash.fromHex(contractHash) } },
   });
 
   const pricing = new PricingMode();
