@@ -83,6 +83,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setError(null);
     try {
       await provider.requestConnection();
+      // Resolve key immediately after approval — don't wait for event
+      const key = await provider.getActivePublicKey();
+      if (key) setPublicKey(key);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Connection failed");
     }
