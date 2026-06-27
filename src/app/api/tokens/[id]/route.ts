@@ -9,7 +9,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     tokenId: token.token_id,
     owner: token.owner,
     deployHash: token.deploy_hash,
-    mintedAt: token.minted_at,
+    mintedAt: Number(token.minted_at),
     deployStatus: token.deploy_status,
     metadata: token.metadata,
     holders: token.holders,
