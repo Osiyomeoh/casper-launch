@@ -73,13 +73,16 @@ export async function getDictItem(
   itemKey: string
 ): Promise<unknown> {
   try {
+    // Casper 2.x nodes use dictionary_identifier.ContractNamedKey with "key" field
     const r = await withFallback(n =>
       rpc(n, "state_get_dictionary_item", {
         state_root_hash: stateRoot,
-        contract_named_key: {
-          hash: `hash-${contractHash}`,
-          dictionary_name: dictionaryName,
-          dictionary_item_key: itemKey,
+        dictionary_identifier: {
+          ContractNamedKey: {
+            key: `hash-${contractHash}`,
+            dictionary_name: dictionaryName,
+            dictionary_item_key: itemKey,
+          },
         },
       })
     );

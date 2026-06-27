@@ -33,6 +33,7 @@ import {
   startSyncLog,
   finishSyncLog,
   getLastSync,
+  deleteEmptyTokens,
   type TokenRecord,
 } from "@/lib/db";
 
@@ -90,7 +91,7 @@ export async function POST() {
 
       const [rawMeta, rawOwner] = await Promise.all([
         getDictItem(stateRoot, CONTRACT_HASH, "metadata", tokenId),
-        getDictItem(stateRoot, CONTRACT_HASH, "token_owners", tokenId),
+        getDictItem(stateRoot, CONTRACT_HASH, "owners", tokenId),
       ]);
 
       // metadata is stored as a JSON string in the CLValue
@@ -104,6 +105,11 @@ export async function POST() {
       } else if (rawMeta && typeof rawMeta === "object") {
         metadata = expandMeta(rawMeta as Record<string, unknown>);
       }
+
+      // Skip tokens with no metadata — these are failed/reverted mints where
+      // the counter incremented but data was never stored on-chain
+      const hasMetadata = rawMeta !== null && Object.keys(metadata).length > 0;
+      if (!hasMetadata) continue;
 
       chainTokens.push({
         token_id: tokenId,
@@ -147,14 +153,16 @@ export async function POST() {
         : (t.deploy_status ?? "unknown"),
     })) as (Partial<TokenRecord> & { token_id: string })[];
 
-    // ── Step 5: Bulk upsert ───────────────────────────────────────────────────
+    // ── Step 5: Bulk upsert + clean empty records ─────────────────────────────
     const upserted = await bulkUpsert(final);
+    const deleted = await deleteEmptyTokens();
     await finishSyncLog(logId, upserted);
 
     return NextResponse.json({
       ok: true,
       totalSupplyOnChain: totalSupply,
       tokensUpserted: upserted,
+      emptyTokensRemoved: deleted,
       stateRoot,
       contractHash: CONTRACT_HASH,
     });

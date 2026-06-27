@@ -168,6 +168,17 @@ export async function bulkUpsert(tokens: (Partial<TokenRecord> & { token_id: str
   return tokens.length;
 }
 
+export async function deleteEmptyTokens(): Promise<number> {
+  await migrate();
+  const rows = await sql()`
+    DELETE FROM tokens
+    WHERE (metadata = '{}'::jsonb OR metadata IS NULL)
+    AND minted_at = 0
+    RETURNING token_id
+  `;
+  return rows.length;
+}
+
 // ── Orders ────────────────────────────────────────────────────────────────────
 
 export type OrderRow = {
