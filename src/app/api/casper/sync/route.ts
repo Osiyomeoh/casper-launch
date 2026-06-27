@@ -53,8 +53,10 @@ function expandMeta(raw: Record<string, unknown>): Record<string, unknown> {
   };
 }
 
-// Prevent concurrent syncs
+// Prevent concurrent syncs within the same serverless instance
+// (cross-instance protection not needed — each Vercel invocation is isolated)
 let syncInProgress = false;
+let syncStartedAt = 0;
 
 export async function POST() {
   if (!CONTRACT_HASH) {
@@ -64,11 +66,13 @@ export async function POST() {
     );
   }
 
-  if (syncInProgress) {
+  // Auto-clear stale lock (serverless instances die after ~30s)
+  if (syncInProgress && Date.now() - syncStartedAt < 60_000) {
     return NextResponse.json({ error: "Sync already in progress" }, { status: 409 });
   }
 
   syncInProgress = true;
+  syncStartedAt = Date.now();
   const logId = await startSyncLog();
 
   try {
