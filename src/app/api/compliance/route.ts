@@ -2,8 +2,8 @@ import { NextResponse } from "next/server";
 import { getAllTokens, getAllOrders } from "@/lib/db";
 
 export async function GET() {
-  const tokens = getAllTokens();
-  const orders = getAllOrders();
+  const tokens = await getAllTokens();
+  const orders = await getAllOrders();
 
   const tokenEvents = tokens.map(t => ({
     type: "mint" as const,

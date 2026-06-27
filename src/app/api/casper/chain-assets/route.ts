@@ -16,7 +16,7 @@ export async function GET(req: Request) {
   const ownerKey = searchParams.get("owner") ?? undefined;
 
   try {
-    const tokens = getAllTokens(ownerKey);
+    const tokens = await getAllTokens(ownerKey);
 
     // Fetch live deploy statuses and total supply in parallel
     const hashes = [...new Set(tokens.map(t => t.deploy_hash).filter(Boolean))];

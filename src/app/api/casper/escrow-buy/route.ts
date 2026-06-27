@@ -75,7 +75,7 @@ export async function POST(req: Request) {
         send({ step: "escrow", status: "done", hash: txHash });
 
         // 3. Update SQLite order
-        updateOrder(order_id, {
+        await updateOrder(order_id, {
           status: "filled",
           buyer_wallet,
           settle_hash: txHash,
@@ -86,9 +86,9 @@ export async function POST(req: Request) {
         const msg = e instanceof Error ? e.message : String(e);
         // Revert local order status if we had one
         try {
-          const ord = getOrder(order_id);
+          const ord = await getOrder(order_id);
           if (ord && ord.status === "open") {
-            updateOrder(order_id, { status: "open" });
+            await updateOrder(order_id, { status: "open" });
           }
         } catch { /* ignore */ }
         send({ step: "error", status: "error", msg });

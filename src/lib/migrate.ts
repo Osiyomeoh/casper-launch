@@ -19,7 +19,7 @@ type LegacyToken = {
 
 export async function migrateJsonToDb(): Promise<void> {
   // Skip if SQLite already has data
-  if (getTokenCount() > 0) return;
+  if (await getTokenCount() > 0) return;
 
   const jsonPath = join(process.cwd(), "data", "tokens.json");
   let legacy: LegacyToken[] = [];

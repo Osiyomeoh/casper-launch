@@ -76,14 +76,14 @@ export async function POST(req: Request) {
       // Off-chain fallback
       if (!YIELD_HASH) {
         if (tokenId) {
-          const token = getToken(tokenId);
+          const token = await getToken(tokenId);
           if (token) {
             const holders = [
               { publicKey: issuerPublicKey, bps: issuerBps },
               ...token.holders.filter(h => h.publicKey !== issuerPublicKey && h.publicKey !== investorPublicKey),
               { publicKey: investorPublicKey, bps: offerBps },
             ].filter(h => h.bps > 0);
-            upsertToken({ ...token, holders });
+            await upsertToken({ ...token, holders });
           }
         }
         send({ step: "done", success: true, issuerBps, investorBps: offerBps, issuerDeployHash: "", investorDeployHash: "", onChain: false });
@@ -145,14 +145,14 @@ export async function POST(req: Request) {
 
       // ── Step 5: Persist cap table ─────────────────────────────────────────
       if (tokenId) {
-        const token = getToken(tokenId);
+        const token = await getToken(tokenId);
         if (token) {
           const holders = [
             { publicKey: issuerPublicKey, bps: issuerBps },
             ...token.holders.filter(h => h.publicKey !== issuerPublicKey && h.publicKey !== investorPublicKey),
             { publicKey: investorPublicKey, bps: offerBps },
           ].filter(h => h.bps > 0);
-          upsertToken({ ...token, holders });
+          await upsertToken({ ...token, holders });
         }
       }
 

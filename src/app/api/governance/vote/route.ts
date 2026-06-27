@@ -8,7 +8,7 @@ export async function POST(req: Request) {
   if (!proposalId || !voter || !choice)
     return NextResponse.json({ error: "Missing fields" }, { status: 400 });
   try {
-    const updated = castVote(proposalId, voter, choice);
+    const updated = await castVote(proposalId, voter, choice);
     return NextResponse.json(updated);
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : "Vote failed" }, { status: 400 });

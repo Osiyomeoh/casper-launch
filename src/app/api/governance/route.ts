@@ -3,7 +3,7 @@ import { getProposals, createProposal } from "@/lib/db";
 
 export async function GET(req: Request) {
   const voter = new URL(req.url).searchParams.get("voter") ?? undefined;
-  return NextResponse.json(getProposals(voter));
+  return NextResponse.json(await getProposals(voter));
 }
 
 export async function POST(req: Request) {
@@ -12,6 +12,6 @@ export async function POST(req: Request) {
   };
   if (!title || !description || !endDate)
     return NextResponse.json({ error: "Missing fields" }, { status: 400 });
-  const proposal = createProposal(title, description, createdBy ?? "anonymous", endDate);
+  const proposal = await createProposal(title, description, createdBy ?? "anonymous", endDate);
   return NextResponse.json(proposal);
 }

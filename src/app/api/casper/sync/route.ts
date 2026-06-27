@@ -54,7 +54,7 @@ export async function POST() {
   }
 
   syncInProgress = true;
-  const logId = startSyncLog();
+  const logId = await startSyncLog();
 
   try {
     // ── Step 1: On-chain state ────────────────────────────────────────────────
@@ -92,7 +92,7 @@ export async function POST() {
 
     // ── Step 3: Merge with existing DB records ────────────────────────────────
     // Preserve deploy hashes and minted_at that we stored at mint time
-    const existing = getAllTokens();
+    const existing = await getAllTokens();
     const existingMap = new Map(existing.map(t => [t.token_id, t]));
 
     const toUpsert = chainTokens.map(ct => {
@@ -125,8 +125,8 @@ export async function POST() {
     })) as (Partial<TokenRecord> & { token_id: string })[];
 
     // ── Step 5: Bulk upsert ───────────────────────────────────────────────────
-    const upserted = bulkUpsert(final);
-    finishSyncLog(logId, upserted);
+    const upserted = await bulkUpsert(final);
+    await finishSyncLog(logId, upserted);
 
     return NextResponse.json({
       ok: true,
@@ -137,7 +137,7 @@ export async function POST() {
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Sync failed";
-    finishSyncLog(logId, 0, msg);
+    await finishSyncLog(logId, 0, msg);
     return NextResponse.json({ error: msg }, { status: 500 });
   } finally {
     syncInProgress = false;
@@ -145,8 +145,8 @@ export async function POST() {
 }
 
 export async function GET() {
-  const lastSync = getLastSync();
-  const tokenCount = getTokenCount();
+  const lastSync = await getLastSync();
+  const tokenCount = await getTokenCount();
   return NextResponse.json({
     tokenCount,
     lastSync: lastSync

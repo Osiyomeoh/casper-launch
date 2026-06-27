@@ -21,11 +21,11 @@ export async function POST(req: Request) {
       paymentHash: string | null;
     };
 
-    const order = getOrder(orderId);
+    const order = await getOrder(orderId);
     if (!order) return NextResponse.json({ error: "Order not found" }, { status: 404 });
     if (order.status !== "open") return NextResponse.json({ error: "Order already settled" }, { status: 409 });
 
-    updateOrder(orderId, { buyer_wallet: buyerPublicKey, payment_hash: paymentHash ?? "agent" });
+    await updateOrder(orderId, { buyer_wallet: buyerPublicKey, payment_hash: paymentHash ?? "agent" });
 
     if (paymentHash) {
       // Buyer signed and submitted their own deploy — wait for it to confirm
@@ -43,7 +43,7 @@ export async function POST(req: Request) {
     console.log("[settle] payment confirmed");
 
     // Get current cap table
-    const token = getToken(order.token_id);
+    const token = await getToken(order.token_id);
     if (!token) throw new Error("Token not found");
 
     const buyerHash = accountHashFromPublicKey(buyerPublicKey);
@@ -73,7 +73,7 @@ export async function POST(req: Request) {
     await upsertToken({ ...token, holders: updatedHolders });
 
     // Mark order filled
-    updateOrder(orderId, { status: "filled", settle_hash: buyerSettleHash });
+    await updateOrder(orderId, { status: "filled", settle_hash: buyerSettleHash });
 
     return NextResponse.json({ ok: true, buyerSettleHash, sellerSettleHash });
   } catch (e) {

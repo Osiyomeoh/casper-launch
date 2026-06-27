@@ -5,9 +5,9 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   if (searchParams.get("listings") === "1") {
     const tokenId = searchParams.get("token_id") ?? undefined;
-    return NextResponse.json(getOpenSellOrders(tokenId));
+    return NextResponse.json(await getOpenSellOrders(tokenId));
   }
-  return NextResponse.json(getAllOrders());
+  return NextResponse.json(await getAllOrders());
 }
 
 export async function POST(req: Request) {
@@ -27,7 +27,7 @@ export async function POST(req: Request) {
     if (!token_id || !order_type || !amount || !price_usd)
       return NextResponse.json({ error: "Missing fields" }, { status: 400 });
 
-    const order = createOrder({
+    const order = await createOrder({
       token_id,
       asset_name,
       order_type,

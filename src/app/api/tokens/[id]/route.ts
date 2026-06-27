@@ -3,7 +3,7 @@ import { getToken, upsertToken } from "@/lib/db";
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const token = getToken(id);
+  const token = await getToken(id);
   if (!token) return NextResponse.json({ error: "Not found" }, { status: 404 });
   return NextResponse.json({
     tokenId: token.token_id,
@@ -18,7 +18,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const existing = getToken(id);
+  const existing = await getToken(id);
   if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const patch = await req.json() as {
@@ -30,7 +30,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     holders?: { publicKey: string; bps: number }[];
   };
 
-  upsertToken({
+  await upsertToken({
     token_id: id,
     owner: patch.owner,
     deploy_hash: patch.deployHash,

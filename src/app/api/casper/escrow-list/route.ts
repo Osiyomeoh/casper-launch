@@ -52,7 +52,7 @@ export async function POST(req: Request) {
     });
 
     // Mirror the on-chain listing in SQLite for the orders UI
-    const order = createOrder({
+    const order = await createOrder({
       token_id,
       asset_name: asset_name ?? token_id,
       order_type: "sell",

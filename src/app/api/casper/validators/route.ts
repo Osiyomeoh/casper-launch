@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-export const revalidate = 120;
+export const dynamic = "force-dynamic";
 
 const NODES = [
   "https://node.testnet.casper.network/rpc",
