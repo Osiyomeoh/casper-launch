@@ -88,7 +88,7 @@ export async function putTransaction(callArgs: ContractCallArgs): Promise<string
   const pricing = new PricingMode();
   const limited = new PaymentLimitedMode();
   limited.paymentAmount = Number(paymentMotes);
-  limited.gasPriceTolerance = 1;
+  limited.gasPriceTolerance = 3;
   limited.standardPayment = true;
   pricing.paymentLimited = limited;
 
