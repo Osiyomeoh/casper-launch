@@ -84,12 +84,13 @@ export default function ChatPage() {
   function saveDraft(overrides: Partial<{
     step: Step; metadata: AssetMetadata | null;
     docHash: string | null; docName: string | null;
+    docCid: string | null; docUrl: string | null;
     kycAttested: boolean; messages: Message[];
     tokenId: number | null; txHash: string | null;
   }> = {}) {
     try {
       const draft = {
-        step, metadata, docHash, docName, kycAttested, messages, tokenId, txHash,
+        step, metadata, docHash, docName, docCid, docUrl, kycAttested, messages, tokenId, txHash,
         ...overrides,
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(draft));
