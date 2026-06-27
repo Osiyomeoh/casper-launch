@@ -12,11 +12,10 @@ import {
   TransactionV1Payload,
   TransactionV1,
   Transaction,
-  TransactionInvocationTarget,
   TransactionEntryPoint,
   TransactionScheduling,
   TransactionTarget,
-  FixedMode,
+  PaymentLimitedMode,
   PricingMode,
   Args,
   NamedArg,
@@ -74,18 +73,16 @@ export async function putTransaction(callArgs: ContractCallArgs): Promise<string
   const publicKey   = privateKey.publicKey;
   const initiatorAddr = new InitiatorAddr(publicKey);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const invTarget = new (TransactionInvocationTarget as any)(`hash-${contractHash}`);
-  const target = new TransactionTarget(invTarget);
+  const target = TransactionTarget.newTransactionTargetFromSession({
+    storedContractByHash: { hash: { hash: Buffer.from(contractHash, "hex") } },
+  });
 
   const pricing = new PricingMode();
-  const fixed = new FixedMode();
-  fixed.gasPriceTolerance = 1;
-  fixed.additionalComputationFactor = 0;
-  // paymentAmount not in TS types but accepted by the SDK at runtime
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (fixed as any).paymentAmount = paymentMotes;
-  pricing.fixed = fixed;
+  const limited = new PaymentLimitedMode();
+  limited.paymentAmount = paymentMotes;
+  limited.gasPriceTolerance = 1;
+  limited.standardPayment = true;
+  pricing.paymentLimited = limited;
 
   const payload = TransactionV1Payload.build({
     initiatorAddr,
