@@ -294,6 +294,18 @@ export default function ChatPage() {
         `CasperLaunch mint authorization\nAsset: ${fullMetadata.asset_name ?? "RWA Token"}\nValuation: $${fullMetadata.valuation_usd ?? 0}\nRecipient: ${wallet.publicKey.slice(0, 20)}…\nTimestamp: ${Date.now()}`
       );
 
+      // Compact on-chain metadata — keep payload small to avoid 413
+      const onChainMeta = {
+        asset_name: fullMetadata.asset_name,
+        asset_type: fullMetadata.asset_type,
+        location: fullMetadata.location,
+        valuation_usd: fullMetadata.valuation_usd,
+        yield_apy: fullMetadata.yield_apy,
+        total_tokens: fullMetadata.total_tokens,
+        ...(docCid ? { ipfs_cid: docCid } : {}),
+        ...(docHash ? { doc_hash: docHash.slice(0, 16) } : {}),
+      };
+
       addMessage("agent", "Minting CEP-78 token on Casper testnet via agent key...");
       const mintRes = await fetch("/api/casper/mint", {
         method: "POST",
@@ -301,7 +313,7 @@ export default function ChatPage() {
         body: JSON.stringify({
           recipientAccountHash: accountHashHex,
           tokenId: id,
-          metadata: fullMetadata,
+          metadata: onChainMeta,
         }),
       });
       const mintData = await mintRes.json() as { deployHash?: string; error?: string };
