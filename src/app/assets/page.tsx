@@ -107,7 +107,15 @@ export default function AssetsPage() {
     fetch("/api/casper/chain-assets")
       .then(r => r.json())
       .then((data: { tokens?: TokenData[] }) => {
-        const serverTokens: TokenData[] = Array.isArray(data.tokens) ? data.tokens : [];
+        const rawTokens: TokenData[] = Array.isArray(data.tokens) ? data.tokens : [];
+        // Deduplicate by deployHash — sync may create on-chain-index records alongside timestamp-ID records
+        const seenHashes = new Set<string>();
+        const serverTokens = rawTokens.filter(t => {
+          if (!t.deployHash) return true;
+          if (seenHashes.has(t.deployHash)) return false;
+          seenHashes.add(t.deployHash);
+          return true;
+        });
         const serverIds = new Set(serverTokens.map(t => String(t.tokenId)));
 
         // Merge in localStorage tokens that aren't in the server DB (pre-migration)

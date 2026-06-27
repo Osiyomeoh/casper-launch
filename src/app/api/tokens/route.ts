@@ -12,7 +12,7 @@ export async function GET(req: Request) {
       tokenId: t.token_id,
       owner: t.owner,
       deployHash: t.deploy_hash,
-      mintedAt: t.minted_at,
+      mintedAt: Number(t.minted_at),
       deployStatus: t.deploy_status,
       metadata: t.metadata,
       holders: t.holders,
