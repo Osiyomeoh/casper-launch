@@ -18,65 +18,90 @@ export interface WalletActions {
 
 type WalletCtx = WalletState & WalletActions;
 
-// Access the CSPR.click SDK loaded by ClickProvider from CDN
-function getSDK(): any {
+function getProvider(): any {
   if (typeof window === "undefined") return null;
-  return (window as any).csprclick ?? null;
+  return (window as any).CasperWalletProvider?.() ?? null;
 }
 
 const WalletContext = createContext<WalletCtx | null>(null);
 
 export function WalletProvider({ children }: { children: ReactNode }) {
   const [publicKey, setPublicKey] = useState<string | null>(null);
+  const [isInstalled, setIsInstalled] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
+  // Check installation and pick up already-connected key
   useEffect(() => {
-    let sdk = getSDK();
-
-    function attach(s: any) {
-      const onSignIn = (account: any) => setPublicKey(account?.public_key ?? null);
-      const onSignOut = () => setPublicKey(null);
-      s.on("csprclick:signed_in", onSignIn);
-      s.on("csprclick:signed_out", onSignOut);
-      s.on("csprclick:active_key_changed", onSignIn);
-      // Pick up already-active account
-      const active = s.getActiveAccount?.();
-      if (active?.public_key) setPublicKey(active.public_key);
-      return () => {
-        s.off?.("csprclick:signed_in", onSignIn);
-        s.off?.("csprclick:signed_out", onSignOut);
-        s.off?.("csprclick:active_key_changed", onSignIn);
-      };
-    }
-
-    if (sdk) return attach(sdk);
-
-    // SDK loads async from CDN — wait for the ready event
-    const onLoaded = () => {
-      sdk = getSDK();
-      if (sdk) attach(sdk);
+    const check = async () => {
+      const provider = getProvider();
+      if (!provider) return;
+      setIsInstalled(true);
+      try {
+        const connected = await provider.isConnected();
+        if (connected) {
+          const key = await provider.getActivePublicKey();
+          if (key) setPublicKey(key);
+        }
+      } catch {}
     };
-    window.addEventListener("csprclick:loaded", onLoaded);
-    return () => window.removeEventListener("csprclick:loaded", onLoaded);
+
+    // Extension may not be injected immediately
+    const timer = setTimeout(check, 300);
+
+    const onConnected = (e: any) => {
+      const key = e.detail?.activeKey ?? null;
+      setPublicKey(key);
+      setIsInstalled(true);
+    };
+    const onDisconnected = () => setPublicKey(null);
+    const onKeyChanged = (e: any) => {
+      const key = e.detail?.activeKey ?? null;
+      setPublicKey(key);
+    };
+
+    window.addEventListener("casper-wallet:connected", onConnected);
+    window.addEventListener("casper-wallet:disconnected", onDisconnected);
+    window.addEventListener("casper-wallet:active-key-changed", onKeyChanged);
+    window.addEventListener("casper-wallet:locked", onDisconnected);
+
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener("casper-wallet:connected", onConnected);
+      window.removeEventListener("casper-wallet:disconnected", onDisconnected);
+      window.removeEventListener("casper-wallet:active-key-changed", onKeyChanged);
+      window.removeEventListener("casper-wallet:locked", onDisconnected);
+    };
   }, []);
 
-  const connect = useCallback(() => {
-    getSDK()?.signIn();
+  const connect = useCallback(async () => {
+    const provider = getProvider();
+    if (!provider) {
+      window.open("https://www.casperwallet.io/", "_blank");
+      return;
+    }
+    setError(null);
+    try {
+      await provider.requestConnection();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Connection failed");
+    }
   }, []);
 
-  const disconnect = useCallback(() => {
-    getSDK()?.signOut();
+  const disconnect = useCallback(async () => {
+    const provider = getProvider();
+    try { await provider?.disconnectFromSite(); } catch {}
     setPublicKey(null);
   }, []);
 
   const signMessage = useCallback(async (message: string): Promise<string> => {
-    const sdk = getSDK();
-    if (!sdk || !publicKey) throw new Error("Wallet not connected");
+    const provider = getProvider();
+    if (!provider || !publicKey) throw new Error("Wallet not connected");
     setLoading(true);
     try {
-      const result = await sdk.signMessage(message, publicKey);
-      if (!result?.signature) throw new Error("Signing cancelled or failed");
-      return result.signature;
+      const result = await provider.signMessage(message, publicKey);
+      if (!result?.signatureHex) throw new Error("Signing cancelled or failed");
+      return result.signatureHex;
     } finally {
       setLoading(false);
     }
@@ -86,19 +111,21 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     ? `${publicKey.slice(0, 8)}…${publicKey.slice(-6)}`
     : null;
 
-  const value: WalletCtx = {
-    isConnected: !!publicKey,
-    publicKey,
-    shortKey,
-    loading,
-    isInstalled: true,
-    error: null,
-    connect,
-    disconnect,
-    signMessage,
-  };
-
-  return <WalletContext.Provider value={value}>{children}</WalletContext.Provider>;
+  return (
+    <WalletContext.Provider value={{
+      isConnected: !!publicKey,
+      publicKey,
+      shortKey,
+      loading,
+      isInstalled,
+      error,
+      connect,
+      disconnect,
+      signMessage,
+    }}>
+      {children}
+    </WalletContext.Provider>
+  );
 }
 
 export function useWallet(): WalletCtx {

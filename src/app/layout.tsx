@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import CsprClickProvider from "./components/CsprClickProvider";
 import { WalletProvider } from "@/lib/wallet-context";
 
 export const metadata: Metadata = {
@@ -22,7 +21,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
       </head>
       <body className="font-sans" suppressHydrationWarning>
-        <CsprClickProvider><WalletProvider>{children}</WalletProvider></CsprClickProvider>
+        <WalletProvider>{children}</WalletProvider>
       </body>
     </html>
   );
