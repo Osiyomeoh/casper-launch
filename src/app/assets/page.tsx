@@ -106,8 +106,28 @@ export default function AssetsPage() {
   useEffect(() => {
     fetch("/api/casper/chain-assets")
       .then(r => r.json())
-      .then((data: { tokens?: TokenData[] }) => setTokens(Array.isArray(data.tokens) ? data.tokens : []))
-      .catch(() => {});
+      .then((data: { tokens?: TokenData[] }) => {
+        const serverTokens: TokenData[] = Array.isArray(data.tokens) ? data.tokens : [];
+        const serverIds = new Set(serverTokens.map(t => String(t.tokenId)));
+
+        // Merge in localStorage tokens that aren't in the server DB (pre-migration)
+        let localTokens: TokenData[] = [];
+        try {
+          const stored = JSON.parse(localStorage.getItem("casperlaunch:tokens") ?? "{}") as Record<string, TokenData>;
+          localTokens = Object.values(stored)
+            .filter(t => !serverIds.has(String(t.tokenId)))
+            .map(t => ({ ...t, tokenId: String(t.tokenId), mintedAt: Number(t.mintedAt) }));
+        } catch {}
+
+        setTokens([...serverTokens, ...localTokens]);
+      })
+      .catch(() => {
+        // If server fails entirely, fall back to localStorage
+        try {
+          const stored = JSON.parse(localStorage.getItem("casperlaunch:tokens") ?? "{}") as Record<string, TokenData>;
+          setTokens(Object.values(stored).map(t => ({ ...t, tokenId: String(t.tokenId), mintedAt: Number(t.mintedAt) })));
+        } catch {}
+      });
   }, []);
 
   const ownedAssets = publicKey

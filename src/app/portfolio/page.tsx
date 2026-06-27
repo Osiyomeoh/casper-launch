@@ -23,8 +23,27 @@ export default function PortfolioPage() {
   useEffect(() => {
     fetch("/api/tokens")
       .then(r => r.json())
-      .then((d: TokenData[]) => setTokens(Array.isArray(d) ? d.filter(t => t.deployStatus === "confirmed") : []))
-      .catch(() => {}).finally(() => setLoading(false));
+      .then((d: TokenData[]) => {
+        const serverTokens: TokenData[] = Array.isArray(d) ? d.map(t => ({ ...t, mintedAt: Number(t.mintedAt) })) : [];
+        const serverIds = new Set(serverTokens.map(t => String(t.tokenId)));
+
+        // Merge localStorage tokens not yet in server DB (pre-migration)
+        let localTokens: TokenData[] = [];
+        try {
+          const stored = JSON.parse(localStorage.getItem("casperlaunch:tokens") ?? "{}") as Record<string, TokenData>;
+          localTokens = Object.values(stored)
+            .filter(t => !serverIds.has(String(t.tokenId)))
+            .map(t => ({ ...t, tokenId: String(t.tokenId), mintedAt: Number(t.mintedAt), deployStatus: t.deployStatus ?? "confirmed" }));
+        } catch {}
+
+        setTokens([...serverTokens, ...localTokens]);
+      })
+      .catch(() => {
+        try {
+          const stored = JSON.parse(localStorage.getItem("casperlaunch:tokens") ?? "{}") as Record<string, TokenData>;
+          setTokens(Object.values(stored).map(t => ({ ...t, tokenId: String(t.tokenId), mintedAt: Number(t.mintedAt), deployStatus: "confirmed" })));
+        } catch {}
+      }).finally(() => setLoading(false));
   }, [wallet.publicKey]);
 
   const myHoldings = tokens.map(t => {
