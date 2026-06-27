@@ -110,7 +110,12 @@ export async function putTransaction(callArgs: ContractCallArgs): Promise<string
   const result = await rpc.putTransaction(Transaction.fromTransactionV1(tx));
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const res = result as any;
-  const hash = res?.transactionHash?.Version1 ?? res?.transactionHash?.Deploy ?? "";
+  const th = res?.transactionHash;
+  const hash = typeof th === "string" ? th
+    : th?.Version1 ?? th?.Deploy
+    ?? res?.rawJSON?.transaction_hash?.Version1
+    ?? res?.rawJSON?.transaction_hash?.Deploy
+    ?? "";
   if (!hash) throw new Error(`No hash in putTransaction result: ${JSON.stringify(result)}`);
   return hash;
 }
