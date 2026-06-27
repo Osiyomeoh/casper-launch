@@ -38,6 +38,21 @@ import {
 
 const CONTRACT_HASH = process.env.NEXT_PUBLIC_RWA_NFT_HASH ?? "";
 
+function expandMeta(raw: Record<string, unknown>): Record<string, unknown> {
+  // If already using full keys, pass through
+  if (raw.asset_name !== undefined) return raw;
+  return {
+    asset_name:    raw.n ?? raw.asset_name ?? "",
+    asset_type:    raw.t ?? raw.asset_type ?? "",
+    valuation_usd: Number(raw.v ?? raw.valuation_usd ?? 0),
+    ipfs_cid:      raw.c ?? raw.ipfs_cid ?? "",
+    // Preserve any extra fields already stored
+    ...Object.fromEntries(
+      Object.entries(raw).filter(([k]) => !["n","t","v","c"].includes(k))
+    ),
+  };
+}
+
 // Prevent concurrent syncs
 let syncInProgress = false;
 
@@ -75,11 +90,15 @@ export async function POST() {
       ]);
 
       // metadata is stored as a JSON string in the CLValue
+      // On-chain format uses short keys {n,t,v,c} — expand to full field names
       let metadata: Record<string, unknown> = {};
       if (typeof rawMeta === "string") {
-        try { metadata = JSON.parse(rawMeta); } catch {}
+        try {
+          const raw = JSON.parse(rawMeta) as Record<string, unknown>;
+          metadata = expandMeta(raw);
+        } catch {}
       } else if (rawMeta && typeof rawMeta === "object") {
-        metadata = rawMeta as Record<string, unknown>;
+        metadata = expandMeta(rawMeta as Record<string, unknown>);
       }
 
       chainTokens.push({
