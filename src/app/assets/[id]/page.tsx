@@ -43,6 +43,14 @@ export default function AssetDetailPage() {
     fetch(`/api/tokens/${id}`)
       .then(r => r.ok ? r.json() : null)
       .then((t: TokenData | null) => {
+        // Fall back to localStorage when server can't find the token (Vercel serverless)
+        if (!t) {
+          try {
+            const stored = JSON.parse(localStorage.getItem("casperlaunch:tokens") ?? "{}");
+            const local = stored[id];
+            if (local) t = { ...local, tokenId: String(local.tokenId) } as TokenData;
+          } catch {}
+        }
         if (!t) return;
         setToken(t);
         setHolders(t.holders ?? [{ publicKey: t.owner, bps: 10_000 }]);

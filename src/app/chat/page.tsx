@@ -332,11 +332,19 @@ export default function ChatPage() {
         mintedAt: Date.now(),
         holders: [{ publicKey: wallet.publicKey, bps: 10_000 }],
       };
-      await fetch("/api/tokens", {
+      // Save to localStorage as primary source (Vercel serverless can't share SQLite)
+      try {
+        const stored = JSON.parse(localStorage.getItem("casperlaunch:tokens") ?? "{}");
+        stored[String(id)] = tokenData;
+        localStorage.setItem("casperlaunch:tokens", JSON.stringify(stored));
+      } catch {}
+
+      // Also attempt server-side persist (best-effort)
+      fetch("/api/tokens", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(tokenData),
-      });
+      }).catch(() => {});
 
       // Register issuer as 100% holder in yield-distributor (fire-and-forget)
       fetch("/api/casper/register-holder", {
