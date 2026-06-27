@@ -107,16 +107,24 @@ export async function putTransaction(callArgs: ContractCallArgs): Promise<string
   const tx = TransactionV1.makeTransactionV1(payload);
   tx.sign(privateKey);
 
-  const result = await rpc.putTransaction(Transaction.fromTransactionV1(tx));
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const res = result as any;
-  const th = res?.transactionHash;
-  const hash = typeof th === "string" ? th
-    : th?.Version1 ?? th?.Deploy
-    ?? res?.rawJSON?.transaction_hash?.Version1
-    ?? res?.rawJSON?.transaction_hash?.Deploy
-    ?? "";
-  if (!hash) throw new Error(`No hash in putTransaction result: ${JSON.stringify(result)}`);
+  // Use raw JSON-RPC fetch — avoids SDK wrapper adding extra fields
+  const txJson = TransactionV1.toJSON(tx);
+  const rpcRes = await fetch(NODE, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      jsonrpc: "2.0", id: 1,
+      method: "account_put_transaction",
+      params: { transaction: { Version1: txJson } },
+    }),
+  });
+  const rpcData = await rpcRes.json() as {
+    result?: { transaction_hash?: { Version1?: string; Deploy?: string } };
+    error?: { code?: number; message?: string };
+  };
+  if (rpcData.error) throw new Error(`Code: ${rpcData.error.code}, err: ${rpcData.error.message}`);
+  const hash = rpcData.result?.transaction_hash?.Version1 ?? rpcData.result?.transaction_hash?.Deploy ?? "";
+  if (!hash) throw new Error(`No hash in RPC response: ${JSON.stringify(rpcData)}`);
   return hash;
 }
 

@@ -464,6 +464,13 @@ export default function ChatPage() {
             </div>
 
             <div className="p-4 border-t border-[rgba(100,255,218,0.12)] bg-[#011230]/80 shrink-0">
+              <div className="flex justify-end mb-2">
+                <button onClick={() => { clearDraft(); window.location.reload(); }}
+                  className="text-[10px] font-mono text-[#ebbbb4]/60 hover:text-[#FF0000] transition-colors flex items-center gap-1">
+                  <span className="material-symbols-outlined text-[12px]">refresh</span>
+                  Clear &amp; Restart
+                </button>
+              </div>
               <div className="flex gap-2">
                 <input
                   value={input}
