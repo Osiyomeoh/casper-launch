@@ -111,11 +111,13 @@ export default function AssetsPage() {
         const serverIds = new Set(serverTokens.map(t => String(t.tokenId)));
 
         // Merge in localStorage tokens that aren't in the server DB (pre-migration)
+        // Skip empty ones — those are failed mints with no metadata
         let localTokens: TokenData[] = [];
         try {
           const stored = JSON.parse(localStorage.getItem("casperlaunch:tokens") ?? "{}") as Record<string, TokenData>;
           localTokens = Object.values(stored)
             .filter(t => !serverIds.has(String(t.tokenId)))
+            .filter(t => t.metadata?.asset_name || t.metadata?.valuation_usd)
             .map(t => ({ ...t, tokenId: String(t.tokenId), mintedAt: Number(t.mintedAt) }));
         } catch {}
 
