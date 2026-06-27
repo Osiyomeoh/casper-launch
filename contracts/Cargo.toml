@@ -3,6 +3,8 @@ members = [
     "rwa-nft",
     "yield-distributor",
     "governance",
+    "trade-escrow",
+    "tests",
 ]
 resolver = "2"
 

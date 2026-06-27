@@ -2,8 +2,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState, useCallback } from "react";
 import AppLayout from "../components/AppLayout";
-import { usePrivy, useWallets } from "@privy-io/react-auth";
-import { useCasperWallet } from "@/lib/casper-wallet";
+import { useWallet } from "@/lib/wallet-context";
 
 const EXPLORER = "https://cspr.live";
 
@@ -50,9 +49,7 @@ function useCountUp(target: number, duration = 1600) {
 
 export default function DashboardPage() {
   const terminalRef = useRef<HTMLDivElement>(null);
-  const { user } = usePrivy();
-  const { wallets } = useWallets();
-  const casperWallet = useCasperWallet();
+  const casperWallet = useWallet();
 
   const [logs, setLogs] = useState(() =>
     LOG_POOL.slice(0, 6).map((l, i) => ({ ...l, time: new Date(Date.now() - (5 - i) * 32000).toLocaleTimeString() }))
@@ -119,7 +116,7 @@ export default function DashboardPage() {
     if (terminalRef.current) terminalRef.current.scrollTop = terminalRef.current.scrollHeight;
   }, [logs]);
 
-  const walletAddress = wallets[0]?.address;
+  const walletAddress = casperWallet.publicKey;
 
   return (
     <AppLayout title="Asset Overview">

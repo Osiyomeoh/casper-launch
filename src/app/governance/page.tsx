@@ -1,17 +1,13 @@
 "use client";
 import { useState, useEffect } from "react";
 import AppLayout from "../components/AppLayout";
-import { useCasperWallet } from "@/lib/casper-wallet";
-import { buildVoteTransaction, CONTRACT_HASHES } from "@/lib/contracts";
-import { PublicKey } from "casper-js-sdk";
+import { useWallet } from "@/lib/wallet-context";
 
 type Proposal = {
-  id: string;
-  title: string;
+  id: string; title: string; description: string;
   status: "Active" | "Passed" | "Failed";
-  quorum: number;
-  endDate: string;
-  votes: { for: number; against: number; abstain: number };
+  votes_for: number; votes_against: number; quorum: number;
+  end_date: string; my_vote?: string;
 };
 
 const STATUS_STYLES: Record<string, string> = {
@@ -20,182 +16,212 @@ const STATUS_STYLES: Record<string, string> = {
   Failed: "text-[#FF0000] border-[#FF0000]/30 bg-[#FF0000]/10",
 };
 
-const contractDeployed = !!CONTRACT_HASHES.governance;
-
 export default function GovernancePage() {
-  const wallet = useCasperWallet();
+  const wallet = useWallet();
   const [proposals, setProposals] = useState<Proposal[]>([]);
-  const [loading, setLoading] = useState(contractDeployed);
-  const [voted, setVoted] = useState<Record<string, "for" | "against">>({});
+  const [loading, setLoading] = useState(true);
   const [voting, setVoting] = useState<string | null>(null);
   const [voteError, setVoteError] = useState<string | null>(null);
+  const [showNew, setShowNew] = useState(false);
+  const [newTitle, setNewTitle] = useState("");
+  const [newDesc, setNewDesc] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
-  useEffect(() => {
-    if (!contractDeployed) return;
-    // TODO: fetch proposals from governance contract via RPC
-    // For now resolves empty until contract is deployed and read methods are wired
-    setLoading(false);
-    setProposals([]);
-  }, []);
+  function loadProposals() {
+    const url = wallet.publicKey ? `/api/governance?voter=${wallet.publicKey}` : "/api/governance";
+    fetch(url).then(r => r.json()).then(setProposals).catch(() => {}).finally(() => setLoading(false));
+  }
 
-  async function castVote(proposalId: string, proposalIndex: number, choice: "for" | "against") {
+  useEffect(() => { loadProposals(); }, [wallet.publicKey]);
+
+  async function castVote(proposalId: string, choice: "for" | "against") {
     if (!wallet.isConnected || !wallet.publicKey) { wallet.connect(); return; }
-    setVoting(proposalId);
-    setVoteError(null);
+    setVoting(proposalId); setVoteError(null);
     try {
-      const pk = PublicKey.fromHex(wallet.publicKey);
-      const tx = buildVoteTransaction({ sender: pk, proposalId: proposalIndex, choice: choice === "for" ? 0 : 1, chainName: "casper" });
-      await wallet.signAndSubmit(tx);
-      setVoted((v) => ({ ...v, [proposalId]: choice }));
+      // Step 1: wallet signs authorization message (popup)
+      await wallet.signMessage(
+        `CasperLaunch governance vote\nProposal: ${proposalId}\nChoice: ${choice}\nVoter: ${wallet.publicKey.slice(0, 20)}…\nTimestamp: ${Date.now()}`
+      );
+      // Step 2: agent submits vote to on-chain governance contract
+      const proposalIndex = proposals.findIndex(p => p.id === proposalId);
+      const chainRes = await fetch("/api/governance/submit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "vote", proposalIndex, choice: choice === "for" ? 0 : 1 }),
+      });
+      const chainData = await chainRes.json() as { txHash?: string; error?: string };
+      if (!chainRes.ok) throw new Error(chainData.error ?? "On-chain vote failed");
+      // Step 3: mirror to SQLite for instant UI update
+      const res = await fetch("/api/governance/vote", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ proposalId, voter: wallet.publicKey, choice }),
+      });
+      const data = await res.json() as { error?: string };
+      if (!res.ok) throw new Error(data.error ?? "Vote recording failed");
+      loadProposals();
     } catch (e) {
       setVoteError(e instanceof Error ? e.message : "Vote failed");
     }
     setVoting(null);
   }
 
+  async function submitProposal() {
+    if (!newTitle || !newDesc || !wallet.isConnected) return;
+    setSubmitting(true);
+    try {
+      // Wallet popup — user authorizes the proposal on-chain
+      await wallet.signMessage(
+        `CasperLaunch governance proposal\nTitle: ${newTitle}\nProposer: ${(wallet.publicKey ?? "").slice(0, 20)}…\nTimestamp: ${Date.now()}`
+      );
+      // Agent submits create_proposal to the on-chain governance contract
+      const chainRes = await fetch("/api/governance/submit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "propose", title: newTitle, description: newDesc, deadlineDays: 14 }),
+      });
+      const chainData = await chainRes.json() as { txHash?: string; error?: string };
+      if (!chainRes.ok) throw new Error(chainData.error ?? "On-chain submission failed");
+      // Mirror to SQLite for display
+      const endDate = new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10);
+      await fetch("/api/governance", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: newTitle, description: newDesc, createdBy: wallet.publicKey ?? "anonymous", endDate }),
+      });
+      setNewTitle(""); setNewDesc(""); setShowNew(false);
+      loadProposals();
+    } catch (e) {
+      setVoteError(e instanceof Error ? e.message : "Proposal failed");
+    }
+    setSubmitting(false);
+  }
+
+  const active = proposals.filter(p => p.status === "Active");
+  const totalVotes = proposals.reduce((s, p) => s + p.votes_for + p.votes_against, 0);
+
   return (
-    <AppLayout
-      title="Governance"
-      action={
-        <button className="hidden sm:flex items-center gap-2 bg-[#FF0000] text-white px-4 py-2 rounded-lg text-xs font-bold shadow-[0_0_10px_rgba(255,0,0,0.2)] hover:brightness-110 transition-all active:scale-95">
-          <span className="material-symbols-outlined text-sm">add</span>
-          New Proposal
-        </button>
-      }
-    >
+    <AppLayout title="Governance" action={
+      <button onClick={() => setShowNew(v => !v)}
+        className="flex items-center gap-2 bg-[#FF0000] text-white px-4 py-2 rounded-lg text-xs font-bold hover:brightness-110 transition-all active:scale-95">
+        <span className="material-symbols-outlined text-sm">add</span>
+        New Proposal
+      </button>
+    }>
       <div className="p-4 md:p-8 space-y-6">
         <div className="flex items-center justify-between flex-wrap gap-2">
-          <p className="text-[#ebbbb4] text-sm">Vote on protocol changes. Your token holdings determine your voting power.</p>
-          {!wallet.isConnected ? (
-            <button onClick={wallet.connect} className="px-3 py-1.5 bg-[#192a48] border border-[rgba(100,255,218,0.2)] text-[#64FFDA] text-xs font-mono rounded-lg">
-              {wallet.loading ? "Connecting..." : "Connect Wallet to Vote"}
-            </button>
-          ) : (
-            <span className="text-[10px] font-mono text-[#00C853]">Connected: {wallet.shortKey}</span>
-          )}
+          <p className="text-[#ebbbb4] text-sm">Vote on protocol changes. Token holdings determine voting power.</p>
+          {!wallet.isConnected
+            ? <button onClick={wallet.connect} className="px-3 py-1.5 bg-[#192a48] border border-[rgba(100,255,218,0.2)] text-[#64FFDA] text-xs font-mono rounded-lg">{wallet.loading ? "Connecting…" : "Connect Wallet to Vote"}</button>
+            : <span className="text-[10px] font-mono text-[#00C853]">● {wallet.shortKey}</span>
+          }
         </div>
 
         {voteError && <div className="p-2 bg-[#FF0000]/10 border border-[#FF0000]/20 rounded text-xs text-[#FF0000] font-mono">{voteError}</div>}
 
-        {/* KPI Cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          {[
-            { label: "Your Voting Power", value: wallet.isConnected ? "—" : "0 VP", icon: "how_to_vote", valueColor: "text-[#64FFDA]" },
-            { label: "Active Proposals", value: proposals.filter(p => p.status === "Active").length.toString(), icon: "pending_actions" },
-            { label: "Participation Rate", value: proposals.length ? "—" : "0%", icon: "groups", valueColor: "text-[#00C853]" },
-            { label: "Quorum Required", value: "66%", icon: "verified", sub: "to pass" },
-          ].map((card) => (
-            <div key={card.label} className="p-4 rounded-xl bg-[#112240] border border-[rgba(100,255,218,0.08)]">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="material-symbols-outlined text-[#64FFDA] text-lg">{card.icon}</span>
-                <p className="font-mono text-[9px] text-[#ebbbb4] uppercase tracking-widest leading-tight">{card.label}</p>
-              </div>
-              <span className={`text-xl font-bold ${card.valueColor || "text-[#d8e2ff]"}`}>{card.value}</span>
-              {card.sub && <p className="text-[10px] text-[#ebbbb4] mt-0.5">{card.sub}</p>}
-            </div>
-          ))}
-        </div>
-
-        {/* Contract not deployed warning */}
-        {!contractDeployed && (
-          <div className="p-4 rounded-xl border border-[#FF0000]/20 bg-[#FF0000]/5 flex items-start gap-3">
-            <span className="material-symbols-outlined text-[#FF0000] text-lg shrink-0">warning</span>
-            <div>
-              <p className="text-sm font-bold text-[#FF0000]">Governance contract not deployed</p>
-              <p className="text-xs text-[#ebbbb4] mt-1">Deploy the contracts first, then set <code className="font-mono bg-[#0a192f] px-1 rounded">NEXT_PUBLIC_GOVERNANCE_HASH</code> in <code className="font-mono bg-[#0a192f] px-1 rounded">.env.local</code>.</p>
-              <p className="text-[10px] font-mono text-[#ebbbb4] mt-1">Run: <code className="text-[#64FFDA]">cd contracts && make deploy-testnet</code></p>
+        {/* New proposal form */}
+        {showNew && (
+          <div className="p-5 rounded-xl bg-[#112240] border border-[#64FFDA]/20 space-y-3">
+            <h3 className="font-bold text-sm text-[#d8e2ff]">New Proposal</h3>
+            <input value={newTitle} onChange={e => setNewTitle(e.target.value)} placeholder="Proposal title…"
+              className="w-full bg-[#0a192f] border border-[rgba(100,255,218,0.2)] rounded-lg px-3 py-2 text-sm text-[#d8e2ff] placeholder-[#abb9d6] focus:outline-none focus:border-[#64FFDA]" />
+            <textarea value={newDesc} onChange={e => setNewDesc(e.target.value)} placeholder="Describe the proposal…" rows={3}
+              className="w-full bg-[#0a192f] border border-[rgba(100,255,218,0.2)] rounded-lg px-3 py-2 text-sm text-[#d8e2ff] placeholder-[#abb9d6] focus:outline-none focus:border-[#64FFDA] resize-none" />
+            <div className="flex gap-2">
+              <button onClick={submitProposal} disabled={submitting || !newTitle || !newDesc}
+                className="px-4 py-2 bg-[#FF0000] text-white text-xs font-bold rounded-lg hover:brightness-110 disabled:opacity-40 transition-all">
+                {submitting ? "Submitting…" : "Submit Proposal"}
+              </button>
+              <button onClick={() => setShowNew(false)} className="px-4 py-2 text-xs text-[#abb9d6] hover:text-[#d8e2ff]">Cancel</button>
             </div>
           </div>
         )}
 
+        {/* KPI Cards */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          {[
+            { label: "Active Proposals", value: active.length.toString(), icon: "pending_actions", color: "text-[#64FFDA]" },
+            { label: "Total Votes Cast", value: totalVotes.toString(), icon: "how_to_vote", color: "text-[#d8e2ff]" },
+            { label: "Passed", value: proposals.filter(p => p.status === "Passed").length.toString(), icon: "verified", color: "text-[#00C853]" },
+            { label: "Quorum Required", value: "66%", icon: "groups", color: "text-[#d8e2ff]" },
+          ].map(card => (
+            <div key={card.label} className="p-4 rounded-xl bg-[#112240] border border-[rgba(100,255,218,0.08)]">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="material-symbols-outlined text-[#64FFDA] text-lg">{card.icon}</span>
+                <p className="font-mono text-[9px] text-[#ebbbb4] uppercase tracking-widest">{card.label}</p>
+              </div>
+              <span className={`text-xl font-bold ${card.color}`}>{card.value}</span>
+            </div>
+          ))}
+        </div>
+
         {/* Proposals */}
         <div className="space-y-4">
           <h3 className="font-bold text-sm text-[#d8e2ff]">Active & Recent Proposals</h3>
-
           {loading ? (
-            <div className="flex items-center justify-center py-16">
-              <div className="w-6 h-6 border-2 border-[#64FFDA] border-t-transparent rounded-full animate-spin"></div>
-            </div>
+            <div className="flex justify-center py-16"><div className="w-6 h-6 border-2 border-[#64FFDA] border-t-transparent rounded-full animate-spin" /></div>
           ) : proposals.length === 0 ? (
             <div className="py-16 flex flex-col items-center gap-3 text-center rounded-xl bg-[#112240] border border-[rgba(100,255,218,0.08)]">
               <span className="material-symbols-outlined text-[#64FFDA]/30 text-5xl">how_to_vote</span>
               <p className="text-[#d8e2ff] font-semibold">No proposals yet</p>
-              <p className="text-xs text-[#ebbbb4] max-w-xs">Once the governance contract is deployed and proposals are created on-chain, they will appear here.</p>
-              <button className="mt-2 px-4 py-2 bg-[#FF0000] text-white text-xs font-bold rounded-lg hover:brightness-110 transition-all">
-                Create First Proposal
-              </button>
+              <button onClick={() => setShowNew(true)} className="mt-2 px-4 py-2 bg-[#FF0000] text-white text-xs font-bold rounded-lg hover:brightness-110">Create First Proposal</button>
             </div>
           ) : (
-            <>
-              {/* Mobile cards */}
-              <div className="sm:hidden space-y-3">
-                {proposals.map((p) => (
-                  <div key={p.id} className="p-4 rounded-xl space-y-3 bg-[#112240] border border-[rgba(100,255,218,0.08)]">
-                    <div className="flex items-start justify-between gap-2">
+            <div className="space-y-4">
+              {proposals.map(p => {
+                const total = p.votes_for + p.votes_against || 1;
+                const forPct = Math.round((p.votes_for / total) * 100);
+                const myVote = p.my_vote;
+                return (
+                  <div key={p.id} className="p-5 rounded-xl bg-[#112240] border border-[rgba(100,255,218,0.08)] space-y-3">
+                    <div className="flex items-start justify-between gap-3">
                       <div>
-                        <p className="font-mono text-xs text-[#64FFDA]">{p.id}</p>
-                        <p className="font-semibold text-sm mt-0.5 leading-tight">{p.title}</p>
+                        <p className="font-mono text-[10px] text-[#64FFDA]">{p.id}</p>
+                        <p className="font-bold text-sm mt-0.5">{p.title}</p>
+                        <p className="text-[11px] text-[#abb9d6] mt-1 leading-relaxed">{p.description}</p>
                       </div>
                       <span className={`px-2 py-0.5 rounded border text-[10px] font-bold shrink-0 ${STATUS_STYLES[p.status]}`}>{p.status}</span>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <div className="flex-1 h-1.5 bg-[#253453] rounded-full overflow-hidden">
-                        <div className="h-full bg-[#64FFDA]" style={{ width: `${p.quorum}%` }}></div>
+
+                    {/* Vote bar */}
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-[10px] font-mono text-[#abb9d6]">
+                        <span>For: {p.votes_for} ({forPct}%)</span>
+                        <span>Against: {p.votes_against} ({100 - forPct}%)</span>
                       </div>
-                      <span className="font-mono text-[10px] text-[#ebbbb4]">{p.quorum}% quorum</span>
+                      <div className="h-2 bg-[#253453] rounded-full overflow-hidden flex">
+                        <div className="h-full bg-[#00C853] transition-all" style={{ width: `${forPct}%` }} />
+                        <div className="h-full bg-[#FF0000] transition-all" style={{ width: `${100 - forPct}%` }} />
+                      </div>
+                      <div className="flex justify-between text-[10px] font-mono text-[#abb9d6]">
+                        <span>Quorum: {p.quorum}%</span>
+                        <span>Closes: {p.end_date}</span>
+                      </div>
                     </div>
-                    {p.status === "Active" && !voted[p.id] && (
-                      <div className="flex gap-2">
-                        <button onClick={() => castVote(p.id, proposals.indexOf(p), "for")} disabled={voting === p.id} className="flex-1 py-2 bg-[#00C853] text-[#001a00] text-xs font-bold rounded-lg disabled:opacity-50">{voting === p.id ? "Signing..." : "Vote For"}</button>
-                        <button onClick={() => castVote(p.id, proposals.indexOf(p), "against")} disabled={voting === p.id} className="flex-1 py-2 bg-[#FF0000] text-white text-xs font-bold rounded-lg disabled:opacity-50">{voting === p.id ? "Signing..." : "Vote Against"}</button>
-                      </div>
-                    )}
-                    {voted[p.id] && (
-                      <p className={`text-xs font-bold ${voted[p.id] === "for" ? "text-[#00C853]" : "text-[#FF0000]"}`}>
-                        ✓ Voted {voted[p.id] === "for" ? "For" : "Against"}
-                      </p>
+
+                    {/* Vote action */}
+                    {p.status === "Active" && (
+                      myVote ? (
+                        <p className={`text-xs font-bold ${myVote === "for" ? "text-[#00C853]" : "text-[#FF0000]"}`}>
+                          ✓ You voted {myVote === "for" ? "For" : "Against"}
+                        </p>
+                      ) : (
+                        <div className="flex gap-2">
+                          <button onClick={() => castVote(p.id, "for")} disabled={voting === p.id || !wallet.isConnected}
+                            className="flex-1 sm:flex-none px-4 py-2 bg-[#00C853] text-[#001a00] text-xs font-bold rounded-lg disabled:opacity-50 hover:brightness-110">
+                            {voting === p.id ? "Signing…" : "✓ Vote For"}
+                          </button>
+                          <button onClick={() => castVote(p.id, "against")} disabled={voting === p.id || !wallet.isConnected}
+                            className="flex-1 sm:flex-none px-4 py-2 bg-[#FF0000] text-white text-xs font-bold rounded-lg disabled:opacity-50 hover:brightness-110">
+                            {voting === p.id ? "Signing…" : "✗ Vote Against"}
+                          </button>
+                        </div>
+                      )
                     )}
                   </div>
-                ))}
-              </div>
-
-              {/* Desktop table */}
-              <div className="hidden sm:block rounded-xl overflow-hidden border border-[rgba(100,255,218,0.2)] bg-[#112240]">
-                <table className="w-full text-left">
-                  <thead className="bg-[#000d27]/30 text-[#ebbbb4] font-mono text-[10px] uppercase tracking-widest">
-                    <tr>{["ID", "Title", "Status", "Quorum", "Closes", "Action"].map((h) => <th key={h} className="px-5 py-3">{h}</th>)}</tr>
-                  </thead>
-                  <tbody className="divide-y divide-[rgba(100,255,218,0.1)] text-sm">
-                    {proposals.map((p) => (
-                      <tr key={p.id} className="hover:bg-[#253453]/30 transition-colors">
-                        <td className="px-5 py-4 font-mono text-xs text-[#64FFDA]">{p.id}</td>
-                        <td className="px-5 py-4 font-semibold max-w-xs">{p.title}</td>
-                        <td className="px-5 py-4"><span className={`px-2 py-0.5 rounded border text-[10px] font-bold ${STATUS_STYLES[p.status]}`}>{p.status}</span></td>
-                        <td className="px-5 py-4">
-                          <div className="flex items-center gap-2">
-                            <div className="w-16 h-1.5 bg-[#253453] rounded-full overflow-hidden"><div className="h-full bg-[#64FFDA]" style={{ width: `${p.quorum}%` }}></div></div>
-                            <span className="font-mono text-xs">{p.quorum}%</span>
-                          </div>
-                        </td>
-                        <td className="px-5 py-4 text-[#ebbbb4] text-xs">{p.endDate}</td>
-                        <td className="px-5 py-4">
-                          {p.status === "Active" ? (
-                            voted[p.id] ? (
-                              <span className={`text-xs font-bold ${voted[p.id] === "for" ? "text-[#00C853]" : "text-[#FF0000]"}`}>✓ Voted</span>
-                            ) : (
-                              <div className="flex gap-2">
-                                <button onClick={() => castVote(p.id, proposals.indexOf(p), "for")} disabled={voting === p.id} className="px-3 py-1.5 bg-[#00C853] text-[#001a00] text-xs font-bold rounded disabled:opacity-50">{voting === p.id ? "..." : "For"}</button>
-                                <button onClick={() => castVote(p.id, proposals.indexOf(p), "against")} disabled={voting === p.id} className="px-3 py-1.5 bg-[#FF0000] text-white text-xs font-bold rounded disabled:opacity-50">{voting === p.id ? "..." : "Against"}</button>
-                              </div>
-                            )
-                          ) : <span className="text-[#ebbbb4] text-xs">Closed</span>}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </>
+                );
+              })}
+            </div>
           )}
         </div>
 
@@ -207,13 +233,15 @@ export default function GovernancePage() {
             <span className="ml-auto text-[10px] text-[#64FFDA] font-mono animate-pulse">LIVE</span>
           </div>
           <div className="p-4 font-mono text-[11px] text-[#64FFDA]/80 space-y-1.5">
-            {proposals.length === 0 ? (
-              <p className="text-[#ebbbb4]">[IDLE] No active proposals to analyze. Monitoring chain for new governance activity...</p>
+            {active.length === 0 ? (
+              <p className="text-[#ebbbb4]">[IDLE] No active proposals. Monitoring chain for governance activity…</p>
             ) : (
               <>
-                <p className="text-[#ebbbb4]">[ANALYSIS] Scanning active proposals...</p>
-                <p>&gt;&gt; Quorum tracking and risk model evaluation in progress.</p>
-                <p className="text-[#00C853]">[READY] Connect wallet to receive personalized voting recommendations.</p>
+                <p className="text-[#ebbbb4]">[ANALYSIS] {active.length} active proposal{active.length > 1 ? "s" : ""} detected.</p>
+                {active.map(p => (
+                  <p key={p.id}>&gt;&gt; {p.id}: {p.votes_for + p.votes_against} votes cast — quorum at {p.quorum}%</p>
+                ))}
+                <p className="text-[#00C853]">[READY] {wallet.isConnected ? "Cast your vote above." : "Connect wallet to vote."}</p>
               </>
             )}
           </div>

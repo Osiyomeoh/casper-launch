@@ -18,7 +18,7 @@ CHAIN_MAINNET  = casper
 SECRET_KEY     ?= $(HOME)/.casper/keys/secret_key.pem
 
 # Node RPC endpoints
-NODE_TESTNET   = https://rpc.testnet.casperlabs.io
+NODE_TESTNET   = https://node.testnet.casper.network/rpc
 NODE_MAINNET   = https://rpc.mainnet.casperlabs.io
 
 # Gas payment (in motes; 1 CSPR = 1,000,000,000 motes)

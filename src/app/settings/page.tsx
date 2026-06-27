@@ -1,10 +1,13 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import AppLayout from "../components/AppLayout";
+import { useWallet } from "@/lib/wallet-context";
+import type { AppSettings } from "@/lib/db";
 
 export default function SettingsPage() {
+  const wallet = useWallet();
   const [riskLevel, setRiskLevel] = useState(65);
-  const [toggles, setToggles] = useState({
+  const [toggles, setToggles] = useState<Omit<AppSettings, "riskLevel">>({
     biometrics: true,
     twoFactor: true,
     pushNotifications: true,
@@ -13,9 +16,41 @@ export default function SettingsPage() {
     oracleRebalancing: true,
     complianceReporting: false,
   });
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/settings")
+      .then(r => r.json())
+      .then((s: AppSettings) => {
+        setRiskLevel(s.riskLevel);
+        setToggles({
+          biometrics: s.biometrics,
+          twoFactor: s.twoFactor,
+          pushNotifications: s.pushNotifications,
+          emailReports: s.emailReports,
+          autonomousYield: s.autonomousYield,
+          oracleRebalancing: s.oracleRebalancing,
+          complianceReporting: s.complianceReporting,
+        });
+      })
+      .catch(() => {});
+  }, []);
 
   const toggle = (key: keyof typeof toggles) =>
     setToggles((prev) => ({ ...prev, [key]: !prev[key] }));
+
+  async function handleSave() {
+    setSaving(true);
+    await fetch("/api/settings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ riskLevel, ...toggles }),
+    });
+    setSaving(false);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  }
 
   const Toggle = ({ k }: { k: keyof typeof toggles }) => (
     <label className="relative inline-flex items-center cursor-pointer shrink-0">
@@ -47,9 +82,10 @@ export default function SettingsPage() {
 
   return (
     <AppLayout title="Settings" action={
-      <button className="flex items-center gap-1.5 bg-[#FF0000] text-white px-4 py-2 rounded-lg text-xs font-bold hover:brightness-110 transition-all active:scale-95">
-        <span className="material-symbols-outlined text-sm">save</span>
-        Save Changes
+      <button onClick={handleSave} disabled={saving}
+        className="flex items-center gap-1.5 bg-[#FF0000] text-white px-4 py-2 rounded-lg text-xs font-bold hover:brightness-110 transition-all active:scale-95 disabled:opacity-60">
+        <span className="material-symbols-outlined text-sm">{saved ? "check" : "save"}</span>
+        {saved ? "Saved!" : saving ? "Saving…" : "Save Changes"}
       </button>
     }>
       <div className="p-4 md:p-8">
@@ -82,7 +118,6 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          {/* Two-column grid on desktop */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
 
             {/* Risk tolerance */}
@@ -145,10 +180,19 @@ export default function SettingsPage() {
               <h2 className="font-bold text-sm text-[#FF0000]">Danger Zone</h2>
             </div>
             <div className="flex flex-col sm:flex-row gap-3">
-              <button className="flex-1 py-3 rounded-xl border border-[#FF0000]/30 text-[#FF0000] text-sm font-bold hover:bg-[#FF0000]/5 transition-colors">
+              <button
+                onClick={() => saveSettings({ autonomousYield: false, oracleRebalancing: false, complianceReporting: false })}
+                className="flex-1 py-3 rounded-xl border border-[#FF0000]/30 text-[#FF0000] text-sm font-bold hover:bg-[#FF0000]/5 transition-colors"
+              >
                 Revoke Agent Access
               </button>
-              <button className="flex-1 py-3 rounded-xl bg-[#FF0000] text-white text-sm font-bold hover:brightness-110 active:scale-95 transition-all">
+              <button
+                onClick={async () => {
+                  await wallet.disconnect();
+                  window.location.href = "/";
+                }}
+                className="flex-1 py-3 rounded-xl bg-[#FF0000] text-white text-sm font-bold hover:brightness-110 active:scale-95 transition-all"
+              >
                 Disconnect Wallet
               </button>
             </div>
@@ -158,4 +202,13 @@ export default function SettingsPage() {
       </div>
     </AppLayout>
   );
+
+  function saveSettings(patch: Partial<Omit<AppSettings, "riskLevel">>) {
+    setToggles(prev => ({ ...prev, ...patch }));
+    fetch("/api/settings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ riskLevel, ...toggles, ...patch }),
+    }).catch(() => {});
+  }
 }

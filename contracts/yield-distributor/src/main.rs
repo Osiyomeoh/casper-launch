@@ -184,6 +184,27 @@ pub extern "C" fn register_holder() {
     storage::write(get_uref(KEY_TOTAL_SHARES), total);
 }
 
+/// Update a holder's basis-point share. Admin only. Alias for register_holder.
+#[no_mangle]
+pub extern "C" fn update_share() {
+    require_admin();
+    let account: AccountHash = runtime::get_named_arg("account");
+    let share_bps: u64 = runtime::get_named_arg("share_bps");
+
+    if share_bps > 10_000 {
+        runtime::revert(YieldError::InvalidShare);
+    }
+
+    let holders_uref = get_uref(KEY_HOLDERS);
+    let mut holders: BTreeMap<String, u64> = storage::read(holders_uref)
+        .unwrap_or_revert()
+        .unwrap_or_default();
+    holders.insert(format!("{}", account), share_bps);
+    storage::write(holders_uref, holders.clone());
+    let total: u64 = holders.values().sum();
+    storage::write(get_uref(KEY_TOTAL_SHARES), total);
+}
+
 /// Remove a holder (e.g., when they transfer all tokens). Admin only.
 #[no_mangle]
 pub extern "C" fn remove_holder() {
@@ -230,14 +251,11 @@ pub extern "C" fn call() {
 
     let mut named_keys: NamedKeys = NamedKeys::new();
     named_keys.insert(KEY_PURSE.to_string(), Key::URef(yield_purse));
-
-    for key in &[KEY_POOL_TOTAL, KEY_HOLDERS, KEY_PENDING, KEY_TOTAL_SHARES] {
-        let uref = storage::new_uref(());
-        named_keys.insert(key.to_string(), Key::URef(uref));
-    }
-
-    let admin_uref = storage::new_uref(runtime::get_caller());
-    named_keys.insert(KEY_ADMIN.to_string(), Key::URef(admin_uref));
+    named_keys.insert(KEY_ADMIN.to_string(), Key::URef(storage::new_uref(runtime::get_caller())));
+    named_keys.insert(KEY_POOL_TOTAL.to_string(), Key::URef(storage::new_uref(U512::zero())));
+    named_keys.insert(KEY_HOLDERS.to_string(), Key::URef(storage::new_uref(BTreeMap::<String, u64>::new())));
+    named_keys.insert(KEY_PENDING.to_string(), Key::URef(storage::new_uref(BTreeMap::<String, U512>::new())));
+    named_keys.insert(KEY_TOTAL_SHARES.to_string(), Key::URef(storage::new_uref(0u64)));
 
     let mut entry_points = EntryPoints::new();
 
@@ -278,6 +296,16 @@ pub extern "C" fn call() {
     entry_points.add_entry_point(EntryPoint::new(
         "remove_holder",
         vec![Parameter::new("account", CLType::ByteArray(32))],
+        CLType::Unit,
+        EntryPointAccess::Public,
+        EntryPointType::Called,
+    ));
+    entry_points.add_entry_point(EntryPoint::new(
+        "update_share",
+        vec![
+            Parameter::new("account", CLType::ByteArray(32)),
+            Parameter::new("share_bps", CLType::U64),
+        ],
         CLType::Unit,
         EntryPointAccess::Public,
         EntryPointType::Called,

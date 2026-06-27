@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import AppLayout from "../components/AppLayout";
-import { useWallets } from "@privy-io/react-auth";
+import { useWallet } from "@/lib/wallet-context";
 
 const EXPLORER = "https://cspr.live";
 
@@ -26,12 +26,15 @@ function estimateApy(delegationRate: number) {
 }
 
 export default function StakingPage() {
-  const { wallets } = useWallets();
+  const casperWallet = useWallet();
   const [validators, setValidators] = useState<Validator[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [stakeAmount, setStakeAmount] = useState("");
   const [selectedValidator, setSelectedValidator] = useState(0);
+  const [delegating, setDelegating] = useState(false);
+  const [delegateResult, setDelegateResult] = useState<string | null>(null);
+  const [delegateError, setDelegateError] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/casper/validators")
@@ -43,8 +46,32 @@ export default function StakingPage() {
       .finally(() => setLoading(false));
   }, []);
 
+  async function handleDelegate() {
+    const validator = topValidators[selectedValidator];
+    if (!validator || !stakeAmount) return;
+    if (!casperWallet.isConnected) { casperWallet.connect(); return; }
+    setDelegating(true); setDelegateError(null); setDelegateResult(null);
+    try {
+      const amountMotes = BigInt(Math.ceil(parseFloat(stakeAmount.replace(/,/g, "")) * 1_000_000_000)).toString();
+      await casperWallet.signMessage(
+        `CasperLaunch delegation\nValidator: ${validator.publicKey.slice(0, 20)}…\nAmount: ${stakeAmount} CSPR\nDelegator: ${(casperWallet.publicKey ?? "").slice(0, 20)}…\nTimestamp: ${Date.now()}`
+      );
+      const res = await fetch("/api/casper/delegate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ validatorPublicKey: validator.publicKey, amountMotes }),
+      });
+      const data = await res.json() as { txHash?: string; error?: string };
+      if (!res.ok) throw new Error(data.error ?? "Delegation failed");
+      setDelegateResult(data.txHash ?? "submitted");
+    } catch (e) {
+      setDelegateError(e instanceof Error ? e.message : "Delegation failed");
+    }
+    setDelegating(false);
+  }
+
   const topValidators = validators.slice(0, 10);
-  const walletAddress = wallets[0]?.address;
+  const walletAddress = casperWallet.publicKey;
 
   const monthlyEarnings = stakeAmount
     ? (parseFloat(stakeAmount.replace(/,/g, "")) * 0.007).toFixed(2)
@@ -240,8 +267,20 @@ export default function StakingPage() {
               </a>
             )}
 
-            <button className="w-full py-3 bg-[#FF0000] text-white font-bold rounded-xl text-sm active:scale-95 transition-all hover:brightness-110">
-              Delegate Stake
+            {delegateError && (
+              <div className="p-2 bg-[#FF0000]/10 border border-[#FF0000]/20 rounded-lg text-xs text-[#FF0000] font-mono">{delegateError}</div>
+            )}
+            {delegateResult && (
+              <div className="p-2 bg-[#00C853]/10 border border-[#00C853]/20 rounded-lg text-xs text-[#00C853] font-mono">
+                ✓ Delegation submitted — tx: {delegateResult.slice(0, 16)}…
+              </div>
+            )}
+            <button
+              onClick={handleDelegate}
+              disabled={delegating || !stakeAmount || !topValidators[selectedValidator]}
+              className="w-full py-3 bg-[#FF0000] text-white font-bold rounded-xl text-sm active:scale-95 transition-all hover:brightness-110 disabled:opacity-50"
+            >
+              {delegating ? "Signing & Submitting…" : casperWallet.isConnected ? "Delegate Stake" : "Connect Wallet to Delegate"}
             </button>
           </div>
         </div>

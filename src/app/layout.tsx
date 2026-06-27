@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import PrivyProviderWrapper from "./components/PrivyProviderWrapper";
+import CsprClickProvider from "./components/CsprClickProvider";
+import { WalletProvider } from "@/lib/wallet-context";
 
 export const metadata: Metadata = {
   title: "CasperLaunch | Institutional RWA Tokenization",
@@ -20,8 +21,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           rel="stylesheet"
         />
       </head>
-      <body className="font-sans">
-        <PrivyProviderWrapper>{children}</PrivyProviderWrapper>
+      <body className="font-sans" suppressHydrationWarning>
+        <CsprClickProvider><WalletProvider>{children}</WalletProvider></CsprClickProvider>
       </body>
     </html>
   );

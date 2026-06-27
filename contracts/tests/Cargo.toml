@@ -1,0 +1,12 @@
+[package]
+name = "tests"
+version = "1.0.0"
+edition = "2021"
+
+[lib]
+name = "tests"
+path = "src/lib.rs"
+
+[dev-dependencies]
+casper-engine-test-support = "8.1.1"
+casper-types = "6.1.0"

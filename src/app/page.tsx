@@ -87,7 +87,7 @@ export default function LandingPage() {
               {[
                 { label: "Agents", href: "/chat", active: true },
                 { label: "Dashboard", href: "/dashboard" },
-                { label: "Docs", href: "#" },
+                { label: "Whitepaper", href: "/whitepaper" },
               ].map((l) => (
                 <Link key={l.label} href={l.href}>
                   <span className={`font-medium text-base transition-colors ${l.active ? "text-[#38debb] font-bold border-b-2 border-[#38debb] pb-1" : "text-[#d8e2ff]/70 hover:text-[#d8e2ff]"}`}>{l.label}</span>
@@ -245,6 +245,67 @@ export default function LandingPage() {
           </div>
         </section>
 
+        {/* Whitepaper CTA */}
+        <section className="py-20 max-w-[1440px] mx-auto px-10">
+          <div className="reveal-panel rounded-2xl border border-[#38debb]/20 overflow-hidden" style={{ background: "linear-gradient(135deg, rgba(17,34,64,0.9) 0%, rgba(10,25,47,0.9) 100%)" }}>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-0">
+              {/* Left */}
+              <div className="p-10 lg:p-14 flex flex-col justify-center">
+                <div className="inline-flex items-center gap-2 bg-[#FF0000]/10 border border-[#FF0000]/20 px-3 py-1.5 rounded-full mb-6 self-start">
+                  <span className="material-symbols-outlined text-[#FF0000] text-sm">article</span>
+                  <span className="font-mono text-[10px] text-[#FF0000] uppercase tracking-widest">Whitepaper v1.0</span>
+                </div>
+                <h2 className="text-3xl font-bold text-white mb-4 leading-tight">
+                  Read the Technical <br />& Legal Blueprint
+                </h2>
+                <p className="text-[#ebbbb4] text-base leading-relaxed mb-8 max-w-md">
+                  Everything behind CasperLaunch — smart contract architecture, SPV legal structure, KYC/AML framework, yield mechanics, governance model, and the full production roadmap.
+                </p>
+                <div className="flex flex-wrap gap-4">
+                  <Link href="/whitepaper">
+                    <button className="bg-[#FF0000] text-white px-7 py-3 rounded-lg font-bold text-sm hover:brightness-110 hover:shadow-[0_0_25px_rgba(255,0,0,0.35)] transition-all active:scale-95 flex items-center gap-2">
+                      <span className="material-symbols-outlined text-[18px]">menu_book</span>
+                      Read Whitepaper
+                    </button>
+                  </Link>
+                  <a href="https://github.com/Osiyomeoh/cfo" target="_blank" rel="noopener noreferrer">
+                    <button className="border border-[#38debb]/30 text-[#38debb] px-7 py-3 rounded-lg font-bold text-sm hover:bg-[#38debb]/5 transition-all flex items-center gap-2">
+                      <span className="material-symbols-outlined text-[18px]">code</span>
+                      View Source
+                    </button>
+                  </a>
+                </div>
+              </div>
+
+              {/* Right — section list */}
+              <div className="border-t lg:border-t-0 lg:border-l border-[rgba(100,255,218,0.08)] p-10 lg:p-14">
+                <p className="font-mono text-[10px] uppercase tracking-widest text-[#38debb] mb-6">13 Sections covering</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {[
+                    { icon: "lightbulb", label: "Problem & Solution" },
+                    { icon: "trending_up", label: "Market Opportunity" },
+                    { icon: "code", label: "Smart Contracts" },
+                    { icon: "smart_toy", label: "AI Agent Layer" },
+                    { icon: "account_balance_wallet", label: "Wallet Infrastructure" },
+                    { icon: "swap_horiz", label: "Marketplace & Trading" },
+                    { icon: "account_balance", label: "Yield Distribution" },
+                    { icon: "how_to_vote", label: "Governance Model" },
+                    { icon: "gavel", label: "Legal & Compliance" },
+                    { icon: "apartment", label: "Asset Management" },
+                    { icon: "security", label: "Security Model" },
+                    { icon: "map", label: "Roadmap to Scale" },
+                  ].map((item) => (
+                    <div key={item.label} className="flex items-center gap-2 text-[#abb9d6] text-xs">
+                      <span className="material-symbols-outlined text-[#38debb] text-sm">{item.icon}</span>
+                      {item.label}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
         {/* Casper Advantage */}
         <section className="py-24 bg-[#000d27] overflow-hidden">
           <div className="max-w-[1440px] mx-auto px-10 flex flex-col lg:flex-row items-center gap-16">
@@ -377,8 +438,13 @@ export default function LandingPage() {
             <p className="font-mono text-xs text-[#ebbbb4] max-w-sm">© 2026 CasperLaunch. Built on Casper Network. Institutional RWA infrastructure for the AI era.</p>
           </div>
           <div className="flex flex-wrap justify-center gap-6">
-            {["Terms", "Privacy", "Twitter", "GitHub", "Docs"].map((link) => (
-              <a key={link} className="font-mono text-xs text-[#ebbbb4] hover:text-[#FF0000] transition-all" href="#">{link}</a>
+            {[
+              { label: "Whitepaper", href: "/whitepaper" },
+              { label: "GitHub", href: "https://github.com/Osiyomeoh/cfo" },
+              { label: "Terms", href: "#" },
+              { label: "Privacy", href: "#" },
+            ].map((link) => (
+              <a key={link.label} className="font-mono text-xs text-[#ebbbb4] hover:text-[#FF0000] transition-all" href={link.href}>{link.label}</a>
             ))}
           </div>
           <div className="flex items-center gap-2 px-4 py-2 rounded-full border border-white/5 bg-[#011230]">

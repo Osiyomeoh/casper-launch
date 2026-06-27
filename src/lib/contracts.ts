@@ -40,6 +40,12 @@ export type AssetMetadata = {
   yield_apy: number;
   total_tokens: number;
   ipfs_cid?: string;
+  // Compliance fields — document anchoring
+  document_hash?: string;   // SHA-256 hex of the backing document
+  document_name?: string;   // original filename
+  document_ts?: number;     // unix timestamp when hash was computed
+  // KYC
+  issuer_wallet?: string;   // public key of the minting wallet
 };
 
 export type ProposalMeta = {
