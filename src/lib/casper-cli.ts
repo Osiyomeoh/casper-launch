@@ -95,7 +95,7 @@ export async function putTransaction(callArgs: ContractCallArgs): Promise<string
     pricingMode: pricing,
     timestamp: new Timestamp(new Date()),
     transactionTarget: target,
-    scheduling: new TransactionScheduling(),
+    scheduling: TransactionScheduling.fromJSON("Standard"),
     chainName: CHAIN,
   });
 
