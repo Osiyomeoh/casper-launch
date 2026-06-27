@@ -22,7 +22,13 @@ export async function POST(req: Request) {
     if (!recipientAccountHash || !tokenId || !metadata)
       return NextResponse.json({ error: "Missing fields" }, { status: 400 });
 
-    const metaJson = JSON.stringify(metadata);
+    // Keep on-chain string short — node rejects large payloads
+    const metaJson = JSON.stringify({
+      n: metadata.asset_name ?? "",
+      t: metadata.asset_type ?? "",
+      v: metadata.valuation_usd ?? 0,
+      ...(metadata.ipfs_cid ? { c: metadata.ipfs_cid } : {}),
+    });
     const agentHash = agentAccountHash();
     // recipientAccountHash may be:
     //   - "account-hash-<64hex>"  → strip prefix
