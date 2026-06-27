@@ -1,169 +1,171 @@
 /**
- * Casper client CLI wrappers — Casper 2.0 (Condor) compatible.
- *
- * Uses `put-transaction invocable-entity` (single-step make+sign+submit)
- * instead of the deprecated make-deploy / sign-deploy / send-deploy pipeline.
- *
- * All functions here are synchronous wrappers around spawnSync so they can
- * be used from both regular async routes and SSE streaming routes.
+ * Casper contract interaction helpers — pure SDK, no casper-client binary.
+ * Works on Vercel serverless and any Node.js environment.
  */
 
-import { spawnSync } from "child_process";
-import { join } from "path";
-import { homedir } from "os";
+import {
+  RpcClient,
+  HttpHandler,
+  PrivateKey,
+  PublicKey,
+  KeyAlgorithm,
+  TransactionV1Payload,
+  TransactionV1,
+  Transaction,
+  TransactionInvocationTarget,
+  TransactionEntryPoint,
+  TransactionScheduling,
+  TransactionTarget,
+  FixedMode,
+  PricingMode,
+  Args,
+  NamedArg,
+  CLValue,
+  InitiatorAddr,
+  Duration,
+  Timestamp,
+} from "casper-js-sdk";
 
-const NODE = "https://node.testnet.casper.network/rpc";
+const NODE  = "https://node.testnet.casper.network/rpc";
 const CHAIN = "casper-test";
+const TTL   = new Duration(30 * 60 * 1000); // 30 minutes
 
-export const AGENT_KEY = join(homedir(), ".casper", "keys", "secret_key.pem");
-export const AGENT_PUBKEY = join(homedir(), ".casper", "keys", "public_key.pem");
+const rpc = new RpcClient(new HttpHandler(NODE));
 
-// ── Spawn helper ──────────────────────────────────────────────────────────────
+// ── Agent key (loaded once) ───────────────────────────────────────────────────
 
-function run(args: string[]): string {
-  const r = spawnSync("casper-client", args, { encoding: "utf8", timeout: 45_000 });
-  const out = (r.stdout ?? "") + (r.stderr ?? "");
-  if (r.status !== 0) throw new Error(`casper-client failed: ${out.slice(0, 400)}`);
-  return out;
+let _privateKey: PrivateKey | null = null;
+
+function getAgentKey(): PrivateKey {
+  if (_privateKey) return _privateKey;
+  const pem = process.env.AGENT_SECRET_KEY_PEM;
+  if (!pem) throw new Error("AGENT_SECRET_KEY_PEM env var not set");
+  _privateKey = PrivateKey.fromPem(pem.replace(/\\n/g, "\n"), KeyAlgorithm.ED25519);
+  return _privateKey;
 }
 
-type TxHashWrapper = { Deploy?: string; Version1?: string } | string;
-
-function extractHash(out: string): string {
-  const s = out.indexOf("{"), e = out.lastIndexOf("}");
-  if (s === -1 || e === -1) throw new Error(`No JSON in output: ${out.slice(0, 200)}`);
-  const result = JSON.parse(out.slice(s, e + 1)) as {
-    result?: { transaction_hash?: TxHashWrapper; deploy_hash?: string };
-    transaction_hash?: TxHashWrapper;
-    deploy_hash?: string;
-  };
-  const r = result?.result ?? result;
-  const th = r?.transaction_hash;
-  if (th && typeof th === "object") {
-    // Version1 (put-transaction) or Deploy (legacy put-deploy)
-    if ("Version1" in th && th.Version1) return th.Version1;
-    if ("Deploy"   in th && th.Deploy)   return th.Deploy;
-  }
-  if (th && typeof th === "string") return th;
-  if (r?.deploy_hash) return r.deploy_hash;
-  throw new Error(`No transaction/deploy hash in: ${out.slice(0, 300)}`);
-}
-
-function extractHashAndTrack(out: string): string {
-  return extractHash(out);
-}
-
-// ── Account address ───────────────────────────────────────────────────────────
-
-let _agentHash: string | null = null;
+// ── Account hash helpers ──────────────────────────────────────────────────────
 
 export function agentAccountHash(): string {
-  if (_agentHash) return _agentHash;
-  const out = run(["account-address", "--public-key", AGENT_PUBKEY]);
-  const m = out.match(/account-hash-([0-9a-f]{64})/i);
-  if (!m) throw new Error(`Cannot parse agent account hash from: ${out.slice(0, 200)}`);
-  _agentHash = m[1];
-  return _agentHash;
+  const pubKey = getAgentKey().publicKey;
+  const hash = pubKey.accountHash() as unknown as { hashBytes: Uint8Array };
+  return Buffer.from(hash.hashBytes).toString("hex");
 }
 
 export function accountHashFromPublicKey(pubKeyHex: string): string {
-  const r = spawnSync("casper-client", ["account-address", "--public-key", pubKeyHex], {
-    encoding: "utf8", timeout: 10_000,
-  });
-  const out = (r.stdout ?? "") + (r.stderr ?? "");
-  const m = out.match(/account-hash-([0-9a-f]{64})/i);
-  if (!m) throw new Error(`Cannot parse account hash for ${pubKeyHex.slice(0, 20)}…: ${out.slice(0, 200)}`);
-  return m[1];
+  const pub = PublicKey.fromHex(pubKeyHex);
+  const hash = pub.accountHash() as unknown as { hashBytes: Uint8Array };
+  return Buffer.from(hash.hashBytes).toString("hex");
 }
 
-// ── Contract calls ────────────────────────────────────────────────────────────
+// ── Build + sign + submit a stored contract call ─────────────────────────────
 
 export interface ContractCallArgs {
-  contractHash: string;           // 64-char hex, no prefix
+  contractHash: string;   // 64-char hex, no prefix
   entryPoint: string;
-  sessionArgs: string[];          // each: "name:type='value'"
-  paymentMotes?: string;          // default 5 CSPR
-  gasPriceTolerance?: string;     // default "1"
+  args: Args;
+  paymentMotes?: bigint;
 }
 
-/**
- * Build, sign, and submit a contract call in one step.
- * Returns the deploy/transaction hash.
- */
-export function putTransaction(args: ContractCallArgs): string {
-  const {
-    contractHash,
-    entryPoint,
-    sessionArgs,
-    paymentMotes = "5000000000",
-    gasPriceTolerance = "1",
-  } = args;
+export async function putTransaction(callArgs: ContractCallArgs): Promise<string> {
+  const { contractHash, entryPoint, args, paymentMotes = 5_000_000_000n } = callArgs;
 
-  const argv = [
-    "put-transaction", "invocable-entity",
-    "--chain-name", CHAIN,
-    "--node-address", NODE,
-    "--secret-key", AGENT_KEY,
-    "--contract-hash", `hash-${contractHash}`,
-    "--session-entry-point", entryPoint,
-    "--payment-amount", paymentMotes,
-    "--gas-price-tolerance", gasPriceTolerance,
-    "--standard-payment", "true",
-  ];
+  const privateKey  = getAgentKey();
+  const publicKey   = privateKey.publicKey;
+  const initiatorAddr = new InitiatorAddr(publicKey);
 
-  for (const arg of sessionArgs) {
-    argv.push("--session-arg", arg);
-  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const invTarget = new (TransactionInvocationTarget as any)(`hash-${contractHash}`);
+  const target = new TransactionTarget(invTarget);
 
-  return extractHashAndTrack(run(argv));
+  const pricing = new PricingMode();
+  const fixed = new FixedMode();
+  fixed.gasPriceTolerance = 1;
+  fixed.additionalComputationFactor = 0;
+  // paymentAmount not in TS types but accepted by the SDK at runtime
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (fixed as any).paymentAmount = paymentMotes;
+  pricing.fixed = fixed;
+
+  const payload = TransactionV1Payload.build({
+    initiatorAddr,
+    args,
+    ttl: TTL,
+    entryPoint: TransactionEntryPoint.fromJSON({ Custom: entryPoint }),
+    pricingMode: pricing,
+    timestamp: new Timestamp(new Date()),
+    transactionTarget: target,
+    scheduling: new TransactionScheduling(),
+    chainName: CHAIN,
+  });
+
+  const tx = TransactionV1.makeTransactionV1(payload);
+  tx.sign(privateKey);
+
+  const result = await rpc.putTransaction(Transaction.fromTransactionV1(tx));
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const res = result as any;
+  const hash = res?.transactionHash?.Version1 ?? res?.transactionHash?.Deploy ?? "";
+  if (!hash) throw new Error(`No hash in putTransaction result: ${JSON.stringify(result)}`);
+  return hash;
 }
 
 // ── Convenience wrappers ──────────────────────────────────────────────────────
 
-export function submitSetKyc(
+export async function submitSetKyc(
   rwaContractHash: string,
   accountHashHex: string
-): string {
+): Promise<string> {
+  const hashBytes = Buffer.from(accountHashHex, "hex");
+  const args = Args.fromNamedArgs([
+    new NamedArg("account", CLValue.newCLByteArray(hashBytes)),
+    new NamedArg("approved", CLValue.newCLValueBool(true)),
+  ]);
   return putTransaction({
     contractHash: rwaContractHash,
     entryPoint: "set_kyc",
-    sessionArgs: [
-      `account:byte_array_32='${accountHashHex}'`,
-      "approved:bool='true'",
-    ],
-    paymentMotes: "3000000000",
+    args,
+    paymentMotes: 3_000_000_000n,
   });
 }
 
-export function submitMint(
+export async function submitMint(
   rwaContractHash: string,
   recipientAccountHashHex: string,
   tokenId: string | number,
   metadataJson: string
-): string {
+): Promise<string> {
+  const hashBytes = Buffer.from(recipientAccountHashHex, "hex");
+  const args = Args.fromNamedArgs([
+    new NamedArg("recipient", CLValue.newCLByteArray(hashBytes)),
+    new NamedArg("token_id", CLValue.newCLUint64(BigInt(tokenId))),
+    new NamedArg("metadata", CLValue.newCLString(metadataJson)),
+  ]);
   return putTransaction({
     contractHash: rwaContractHash,
     entryPoint: "mint",
-    sessionArgs: [
-      `recipient:byte_array_32='${recipientAccountHashHex}'`,
-      `token_id:u64='${tokenId}'`,
-      `metadata:string='${metadataJson}'`,
-    ],
-    paymentMotes: "10000000000",
+    args,
+    paymentMotes: 10_000_000_000n,
   });
 }
 
-export function submitRegisterHolder(
+export async function submitRegisterHolder(
   yieldContractHash: string,
   accountHashHex: string,
   shareBps: number
-): string {
+): Promise<string> {
+  const hashBytes = Buffer.from(accountHashHex, "hex");
+  const args = Args.fromNamedArgs([
+    new NamedArg("account", CLValue.newCLByteArray(hashBytes)),
+    new NamedArg("share_bps", CLValue.newCLUint64(BigInt(shareBps))),
+  ]);
   return putTransaction({
     contractHash: yieldContractHash,
     entryPoint: "register_holder",
-    sessionArgs: [
-      `account:byte_array_32='${accountHashHex}'`,
-      `share_bps:u64='${shareBps}'`,
-    ],
+    args,
   });
 }
+
+// Keep these for any routes that still import them as values
+export const AGENT_KEY = "";
+export const AGENT_PUBKEY = "";

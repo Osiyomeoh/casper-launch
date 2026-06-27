@@ -36,11 +36,11 @@ export async function POST(req: Request) {
 
     // ── Step 1: KYC-whitelist agent + recipient ──────────────────────────────
     console.log("[mint] whitelisting agent:", agentHash);
-    const kycHashes: string[] = [submitSetKyc(CONTRACT_HASH, agentHash)];
+    const kycHashes: string[] = [await submitSetKyc(CONTRACT_HASH, agentHash)];
 
     if (recipientHash !== agentHash) {
       console.log("[mint] whitelisting recipient:", recipientHash);
-      kycHashes.push(submitSetKyc(CONTRACT_HASH, recipientHash));
+      kycHashes.push(await submitSetKyc(CONTRACT_HASH, recipientHash));
     }
 
     console.log("[mint] waiting for KYC confirmation:", kycHashes);
@@ -48,7 +48,7 @@ export async function POST(req: Request) {
     console.log("[mint] KYC confirmed — minting");
 
     // ── Step 2: Mint ─────────────────────────────────────────────────────────
-    const deployHash = submitMint(CONTRACT_HASH, recipientHash, tokenId, metaJson);
+    const deployHash = await submitMint(CONTRACT_HASH, recipientHash, tokenId, metaJson);
     return NextResponse.json({ deployHash, kycDeployHashes: kycHashes });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Mint failed";

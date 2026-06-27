@@ -1,10 +1,8 @@
 import { NextResponse } from "next/server";
-import { spawnSync } from "child_process";
-import { accountHashFromPublicKey, AGENT_KEY } from "@/lib/casper-cli";
+import { accountHashFromPublicKey, putTransaction } from "@/lib/casper-cli";
+import { Args, NamedArg, CLValue } from "casper-js-sdk";
 
 const YIELD_HASH = process.env.NEXT_PUBLIC_YIELD_HASH ?? "";
-const CHAIN = process.env.NEXT_PUBLIC_CASPER_CHAIN ?? "casper-test";
-const NODE = process.env.NEXT_PUBLIC_CASPER_NODE ?? "https://node.testnet.casper.network/rpc";
 
 export async function POST(req: Request) {
   try {
@@ -13,26 +11,18 @@ export async function POST(req: Request) {
     if (!YIELD_HASH) return NextResponse.json({ error: "NEXT_PUBLIC_YIELD_HASH not set" }, { status: 500 });
 
     const claimerHash = accountHashFromPublicKey(claimerPublicKey);
+    const hashBytes = Buffer.from(claimerHash, "hex");
 
-    const r = spawnSync("casper-client", [
-      "put-transaction", "invocable-entity",
-      "--node-address", NODE,
-      "--chain-name", CHAIN,
-      "--secret-key", AGENT_KEY,
-      "--entity-address", `entity-contract-${YIELD_HASH}`,
-      "--session-entry-point", "claim",
-      "--session-arg", `claimer:account_hash='account-hash-${claimerHash}'`,
-      "--payment-amount", "5000000000",
-      "--standard-payment", "true",
-      "--gas-price-tolerance", "1",
-    ], { encoding: "utf8", timeout: 30_000 });
+    const args = Args.fromNamedArgs([
+      new NamedArg("claimer", CLValue.newCLByteArray(hashBytes)),
+    ]);
 
-    const out = (r.stdout ?? "") + (r.stderr ?? "");
-    if (r.status !== 0) throw new Error(out.replace(/#{2,}.*?#{2,}/gs, "").trim().slice(0, 300));
-
-    const match = out.match(/"transaction_hash"[^}]*"[A-Za-z0-9]+"\s*:\s*"([0-9a-f]{64})"/i)
-      ?? out.match(/[0-9a-f]{64}/);
-    const txHash = match?.[1] ?? match?.[0] ?? "submitted";
+    const txHash = await putTransaction({
+      contractHash: YIELD_HASH,
+      entryPoint: "claim",
+      args,
+      paymentMotes: 5_000_000_000n,
+    });
 
     return NextResponse.json({ txHash });
   } catch (e) {

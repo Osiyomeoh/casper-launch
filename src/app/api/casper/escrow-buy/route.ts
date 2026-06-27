@@ -17,8 +17,12 @@
  * Returns: SSE stream with { step, status, hash? }
  */
 
-import { putTransaction, accountHashFromPublicKey } from "@/lib/casper-cli";
+import {
+  putTransaction,
+  accountHashFromPublicKey,
+} from "@/lib/casper-cli";
 import { updateOrder, getOrder } from "@/lib/db";
+import { Args, NamedArg, CLValue } from "casper-js-sdk";
 
 const ESCROW_HASH = process.env.NEXT_PUBLIC_ESCROW_HASH ?? "";
 
@@ -56,19 +60,17 @@ export async function POST(req: Request) {
 
         // 2. Submit the atomic escrow buy transaction
         send({ step: "escrow", status: "running", msg: "Submitting atomic escrow buy..." });
-        const txHash = putTransaction({
+        const buyerHashBytes = Buffer.from(buyerHash, "hex");
+        const args = Args.fromNamedArgs([
+          new NamedArg("listing_id", CLValue.newCLString(listing_id)),
+          new NamedArg("buyer_hash", CLValue.newCLByteArray(buyerHashBytes)),
+          new NamedArg("amount", CLValue.newCLUInt512(BigInt(amount_cspr_motes))),
+        ]);
+        const txHash = await putTransaction({
           contractHash: ESCROW_HASH,
           entryPoint: "buy",
-          sessionArgs: [
-            `listing_id:string='${listing_id}'`,
-            // source_purse and amount are handled by the contract using the
-            // payment purse attached to the transaction (standard payment)
-            `buyer_hash:byte_array_32='${buyerHash}'`,
-            `amount:u512='${amount_cspr_motes}'`,
-          ],
-          // Payment covers both gas AND escrow amount for the demo
-          // In production buyer signs with their own purse via CasperWallet
-          paymentMotes: (BigInt(amount_cspr_motes) + BigInt(5_000_000_000)).toString(),
+          args,
+          paymentMotes: BigInt(amount_cspr_motes) + 5_000_000_000n,
         });
         send({ step: "escrow", status: "done", hash: txHash });
 

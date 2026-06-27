@@ -1,9 +1,24 @@
 import { NextResponse } from "next/server";
-import { spawnSync } from "child_process";
-import { AGENT_KEY } from "@/lib/casper-cli";
+import {
+  RpcClient,
+  HttpHandler,
+  PrivateKey,
+  KeyAlgorithm,
+  makeAuctionManagerDeploy,
+  AuctionManagerEntryPoint,
+  CasperNetworkName,
+} from "casper-js-sdk";
 
-const CHAIN = process.env.NEXT_PUBLIC_CASPER_CHAIN ?? "casper-test";
+const CHAIN = (process.env.NEXT_PUBLIC_CASPER_CHAIN ?? CasperNetworkName.Testnet) as CasperNetworkName;
 const NODE = process.env.NEXT_PUBLIC_CASPER_NODE ?? "https://node.testnet.casper.network/rpc";
+
+const rpc = new RpcClient(new HttpHandler(NODE));
+
+function getAgentPrivateKey(): PrivateKey {
+  const pem = process.env.AGENT_SECRET_KEY_PEM;
+  if (!pem) throw new Error("AGENT_SECRET_KEY_PEM env var not set");
+  return PrivateKey.fromPem(pem.replace(/\\n/g, "\n"), KeyAlgorithm.ED25519);
+}
 
 export async function POST(req: Request) {
   try {
@@ -15,54 +30,24 @@ export async function POST(req: Request) {
     if (!validatorPublicKey || !amountMotes)
       return NextResponse.json({ error: "validatorPublicKey and amountMotes required" }, { status: 400 });
 
-    const r = spawnSync("casper-client", [
-      "put-deploy",
-      "--node-address", NODE,
-      "--chain-name", CHAIN,
-      "--secret-key", AGENT_KEY,
-      "--session-path", "/dev/null",
-      "--payment-amount", "3000000000",
-    ], { encoding: "utf8", timeout: 30_000 });
+    const agentKey = getAgentPrivateKey();
+    const agentPubKeyHex = agentKey.publicKey.toHex();
 
-    // Casper native delegation via auction contract
-    const delegate = spawnSync("casper-client", [
-      "put-transaction", "native",
-      "--node-address", NODE,
-      "--chain-name", CHAIN,
-      "--secret-key", AGENT_KEY,
-      "--transfer-amount", amountMotes,
-      "--target-account", validatorPublicKey,
-      "--payment-amount", "3000000000",
-      "--standard-payment", "true",
-      "--gas-price-tolerance", "1",
-      "--transaction-category", "1",
-    ], { encoding: "utf8", timeout: 30_000 });
+    const deploy = makeAuctionManagerDeploy({
+      contractEntryPoint: AuctionManagerEntryPoint.delegate,
+      delegatorPublicKeyHex: agentPubKeyHex,
+      validatorPublicKeyHex: validatorPublicKey,
+      amount: amountMotes,
+      paymentAmount: "3000000000",
+      chainName: CHAIN,
+    });
 
-    const out = (delegate.stdout ?? "") + (delegate.stderr ?? "");
+    deploy.sign(agentKey);
+    const result = await rpc.putDeploy(deploy);
+    const hash = result?.deployHash;
+    const txHash = hash ? (typeof hash === "string" ? hash : (hash as { toHex?: () => string }).toHex?.() ?? String(hash)) : "submitted";
 
-    if (delegate.status !== 0) {
-      // Fall back to auction contract delegation
-      const auction = spawnSync("casper-client", [
-        "put-deploy",
-        "--node-address", NODE,
-        "--chain-name", CHAIN,
-        "--secret-key", AGENT_KEY,
-        "--payment-amount", "3000000000",
-        "--session-hash", "hash-93d923e336b20a4c4b3b9b5604c4d55a",
-        "--session-entry-point", "delegate",
-        "--session-arg", `delegator:public_key='${validatorPublicKey}'`,
-        "--session-arg", `validator:public_key='${validatorPublicKey}'`,
-        "--session-arg", `amount:u512='${amountMotes}'`,
-      ], { encoding: "utf8", timeout: 30_000 });
-
-      const aOut = (auction.stdout ?? "") + (auction.stderr ?? "");
-      if (auction.status !== 0) throw new Error(aOut.slice(0, 300));
-      const match = aOut.match(/"deploy_hash"\s*:\s*"([0-9a-f]{64})"/i) ?? aOut.match(/([0-9a-f]{64})/);
-      return NextResponse.json({ txHash: match?.[1] ?? "submitted" });
-    }
-
-    const match = out.match(/"[A-Za-z0-9_]*hash"\s*:\s*"([0-9a-f]{64})"/i) ?? out.match(/([0-9a-f]{64})/);
-    return NextResponse.json({ txHash: match?.[1] ?? "submitted" });
+    return NextResponse.json({ txHash });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Delegation failed";
     console.error("[delegate]", msg);

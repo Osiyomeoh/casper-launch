@@ -3,31 +3,10 @@
  * action: "propose" | "vote"
  */
 import { NextResponse } from "next/server";
-import { spawnSync } from "child_process";
-import { AGENT_KEY } from "@/lib/casper-cli";
+import { putTransaction } from "@/lib/casper-cli";
+import { Args, NamedArg, CLValue } from "casper-js-sdk";
 
 const GOV_HASH = process.env.NEXT_PUBLIC_GOVERNANCE_HASH ?? "";
-const CHAIN = process.env.NEXT_PUBLIC_CASPER_CHAIN ?? "casper-test";
-const NODE = process.env.NEXT_PUBLIC_CASPER_NODE ?? "https://node.testnet.casper.network/rpc";
-
-function putTx(args: string[]): string {
-  const r = spawnSync("casper-client", [
-    "put-transaction", "invocable-entity",
-    "--node-address", NODE,
-    "--chain-name", CHAIN,
-    "--secret-key", AGENT_KEY,
-    "--entity-address", `entity-contract-${GOV_HASH}`,
-    "--payment-amount", "5000000000",
-    "--standard-payment", "true",
-    "--gas-price-tolerance", "1",
-    ...args,
-  ], { encoding: "utf8", timeout: 30_000 });
-
-  const out = (r.stdout ?? "") + (r.stderr ?? "");
-  if (r.status !== 0) throw new Error(out.replace(/#{2,}.*?#{2,}/gs, "").trim().slice(0, 300));
-  const match = out.match(/"[A-Za-z0-9_]*hash"\s*:\s*"([0-9a-f]{64})"/i) ?? out.match(/([0-9a-f]{64})/);
-  return match?.[1] ?? "submitted";
-}
 
 export async function POST(req: Request) {
   try {
@@ -44,19 +23,29 @@ export async function POST(req: Request) {
 
     let txHash: string;
     if (body.action === "propose") {
-      const deadline = Math.floor(Date.now() / 1000) + (body.deadlineDays ?? 14) * 86400;
-      txHash = putTx([
-        "--session-entry-point", "create_proposal",
-        "--session-arg", `title:string='${(body.title ?? "").replace(/'/g, "")}'`,
-        "--session-arg", `description:string='${(body.description ?? "").replace(/'/g, "")}'`,
-        "--session-arg", `deadline:u64='${deadline}'`,
+      const deadline = BigInt(Math.floor(Date.now() / 1000) + (body.deadlineDays ?? 14) * 86400);
+      const args = Args.fromNamedArgs([
+        new NamedArg("title", CLValue.newCLString((body.title ?? "").replace(/'/g, ""))),
+        new NamedArg("description", CLValue.newCLString((body.description ?? "").replace(/'/g, ""))),
+        new NamedArg("deadline", CLValue.newCLUint64(deadline)),
       ]);
+      txHash = await putTransaction({
+        contractHash: GOV_HASH,
+        entryPoint: "create_proposal",
+        args,
+        paymentMotes: 5_000_000_000n,
+      });
     } else if (body.action === "vote") {
-      txHash = putTx([
-        "--session-entry-point", "vote",
-        "--session-arg", `proposal_id:u64='${body.proposalIndex ?? 0}'`,
-        "--session-arg", `choice:u8='${body.choice ?? 0}'`,
+      const args = Args.fromNamedArgs([
+        new NamedArg("proposal_id", CLValue.newCLUint64(BigInt(body.proposalIndex ?? 0))),
+        new NamedArg("choice", CLValue.newCLUint8(body.choice ?? 0)),
       ]);
+      txHash = await putTransaction({
+        contractHash: GOV_HASH,
+        entryPoint: "vote",
+        args,
+        paymentMotes: 5_000_000_000n,
+      });
     } else {
       return NextResponse.json({ error: "Unknown action" }, { status: 400 });
     }

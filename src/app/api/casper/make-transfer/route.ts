@@ -9,14 +9,20 @@
  * Returns: { deployJson, activated? } — unsigned deploy JSON for CasperWallet to sign
  */
 import { NextResponse } from "next/server";
-import { spawnSync } from "child_process";
-import { writeFileSync, readFileSync, unlinkSync } from "fs";
-import { join } from "path";
-import { tmpdir } from "os";
-import { accountHashFromPublicKey, AGENT_KEY } from "@/lib/casper-cli";
+import { accountHashFromPublicKey } from "@/lib/casper-cli";
+import {
+  RpcClient,
+  HttpHandler,
+  PrivateKey,
+  KeyAlgorithm,
+  makeCsprTransferDeploy,
+  Deploy,
+} from "casper-js-sdk";
 
 const CHAIN = "casper-test";
 const NODE  = "https://node.testnet.casper.network/rpc";
+
+const rpc = new RpcClient(new HttpHandler(NODE));
 
 async function accountExists(pubKeyHex: string): Promise<boolean> {
   try {
@@ -38,24 +44,31 @@ async function accountExists(pubKeyHex: string): Promise<boolean> {
   }
 }
 
-function activateAccount(pubKeyHex: string, seedMotes: string): string {
-  // Use the legacy `transfer` command (v1 deploy format) so the new account
-  // is a v1-compatible account that can later submit legacy make-transfer deploys.
-  const seed = (BigInt(seedMotes) + BigInt(500_000_000)).toString(); // purchase + 0.5 CSPR gas buffer
-  const accountHash = `account-hash-${accountHashFromPublicKey(pubKeyHex)}`;
-  const r = spawnSync("casper-client", [
-    "transfer",
-    "--chain-name", CHAIN,
-    "--node-address", NODE,
-    "--secret-key", AGENT_KEY,
-    "--amount", seed,
-    "--target-account", accountHash,
-    "--transfer-id", "1",
-    "--payment-amount", "100000000",
-  ], { encoding: "utf8", timeout: 30_000 });
-  const out = (r.stdout ?? "") + (r.stderr ?? "");
-  if (r.status !== 0) throw new Error(`Account activation failed: ${out.slice(0, 300)}`);
-  return out;
+function getAgentPrivateKey(): PrivateKey {
+  const pem = process.env.AGENT_SECRET_KEY_PEM;
+  if (!pem) throw new Error("AGENT_SECRET_KEY_PEM env var not set");
+  return PrivateKey.fromPem(pem.replace(/\\n/g, "\n"), KeyAlgorithm.ED25519);
+}
+
+async function activateAccount(pubKeyHex: string, seedMotes: string): Promise<string> {
+  const agentKey = getAgentPrivateKey();
+  const agentPubKey = agentKey.publicKey;
+  // Send seed + 0.5 CSPR for gas
+  const amount = (BigInt(seedMotes) + 500_000_000n).toString();
+
+  const deploy = makeCsprTransferDeploy({
+    senderPublicKeyHex: agentPubKey.toHex(),
+    recipientPublicKeyHex: pubKeyHex,
+    transferAmount: amount,
+    chainName: CHAIN,
+    paymentAmount: "100000000",
+  });
+  deploy.sign(agentKey);
+
+  const result = await rpc.putDeploy(deploy);
+  // deployHash is a Hash object — convert to string
+  const hash = result?.deployHash;
+  return hash ? (typeof hash === "string" ? hash : (hash as { toHex?: () => string }).toHex?.() ?? String(hash)) : "agent-activation-ok";
 }
 
 async function waitForAccount(pubKeyHex: string, maxMs = 60_000): Promise<void> {
@@ -78,39 +91,25 @@ export async function POST(req: Request) {
     if (!buyerPublicKey || !sellerPublicKey || !csprMotes)
       return NextResponse.json({ error: "Missing fields" }, { status: 400 });
 
-    const sellerHash = sellerPublicKey.startsWith("account-hash-")
-      ? sellerPublicKey
-      : `account-hash-${accountHashFromPublicKey(sellerPublicKey)}`;
-
     // Always top up the buyer with enough CSPR for this purchase.
     // If the account doesn't exist yet, this also creates it.
-    // We use the legacy transfer command so the account is v1-compatible.
-    activateAccount(buyerPublicKey, csprMotes);
+    await activateAccount(buyerPublicKey, csprMotes);
     await waitForAccount(buyerPublicKey);
     const activated = true;
 
-    const outFile = join(tmpdir(), `transfer-${Date.now()}.json`);
+    // Build unsigned transfer deploy for the buyer to sign in their wallet
+    const deploy = makeCsprTransferDeploy({
+      senderPublicKeyHex: buyerPublicKey,
+      recipientPublicKeyHex: sellerPublicKey.startsWith("account-hash-")
+        ? sellerPublicKey
+        : sellerPublicKey,
+      transferAmount: csprMotes,
+      chainName: CHAIN,
+      paymentAmount: "100000000",
+      memo: Date.now().toString(),
+    });
 
-    const r = spawnSync("casper-client", [
-      "make-transfer",
-      "--chain-name", CHAIN,
-      "--amount", csprMotes,
-      "--target-account", sellerHash,
-      "--payment-amount", "100000000",
-      "--transfer-id", Date.now().toString(),
-      "--session-account", buyerPublicKey,
-      "--output", outFile,
-    ], { encoding: "utf8", timeout: 15_000 });
-
-    if (r.status !== 0) {
-      const out = (r.stdout ?? "") + (r.stderr ?? "");
-      throw new Error(`make-transfer failed: ${out.slice(0, 300)}`);
-    }
-
-    const deployJson = readFileSync(outFile, "utf8");
-    try { unlinkSync(outFile); } catch {}
-
-    return NextResponse.json({ deployJson: JSON.parse(deployJson), activated });
+    return NextResponse.json({ deployJson: Deploy.toJSON(deploy), activated });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Failed to create transfer";
     return NextResponse.json({ error: msg }, { status: 500 });

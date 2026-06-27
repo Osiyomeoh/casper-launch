@@ -122,7 +122,7 @@ export async function POST(req: Request) {
 
         // ── Step 2: Submit KYC ──────────────────────────────────────────────
         send({ step: "kyc-submit", message: `Submitting KYC whitelist deploy${needsKyc.length > 1 ? "s" : ""} on-chain…`, hashes: [] });
-        const kycHashes = needsKyc.map(n => ({ ...n, deployHash: submitSetKyc(RWA_HASH, n.hash) }));
+        const kycHashes = await Promise.all(needsKyc.map(async n => ({ ...n, deployHash: await submitSetKyc(RWA_HASH, n.hash) })));
         send({ step: "kyc-submit", message: `KYC deploy${kycHashes.length > 1 ? "s" : ""} submitted — waiting for block confirmation…`, hashes: kycHashes.map(k => k.deployHash) });
 
         // ── Step 3: Wait for KYC ────────────────────────────────────────────
@@ -138,9 +138,9 @@ export async function POST(req: Request) {
 
       // ── Step 4: Register holder shares ────────────────────────────────────
       send({ step: "shares", message: `Registering issuer share (${(issuerBps / 100).toFixed(0)}%) on yield contract…`, role: "issuer" });
-      const hash1 = submitRegisterHolder(YIELD_HASH, issuerH, issuerBps);
+      const hash1 = await submitRegisterHolder(YIELD_HASH, issuerH, issuerBps);
       send({ step: "shares", message: `Issuer share submitted — registering investor share (${(offerBps / 100).toFixed(0)}%)…`, hash: hash1, role: "investor" });
-      const hash2 = submitRegisterHolder(YIELD_HASH, investorH, offerBps);
+      const hash2 = await submitRegisterHolder(YIELD_HASH, investorH, offerBps);
       send({ step: "shares", message: "Investor share submitted ✓", hash: hash2 });
 
       // ── Step 5: Persist cap table ─────────────────────────────────────────

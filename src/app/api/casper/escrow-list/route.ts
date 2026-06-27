@@ -14,6 +14,7 @@
 import { NextResponse } from "next/server";
 import { putTransaction } from "@/lib/casper-cli";
 import { createOrder } from "@/lib/db";
+import { Args, NamedArg, CLValue } from "casper-js-sdk";
 
 const ESCROW_HASH = process.env.NEXT_PUBLIC_ESCROW_HASH ?? "";
 
@@ -38,14 +39,16 @@ export async function POST(req: Request) {
     }
 
     // Call escrow contract `list` entry point
-    const txHash = putTransaction({
+    const args = Args.fromNamedArgs([
+      new NamedArg("bps", CLValue.newCLUint64(BigInt(bps))),
+      new NamedArg("price_cspr", CLValue.newCLUInt512(BigInt(price_cspr))),
+    ]);
+
+    const txHash = await putTransaction({
       contractHash: ESCROW_HASH,
       entryPoint: "list",
-      sessionArgs: [
-        `bps:u64='${bps}'`,
-        `price_cspr:u512='${price_cspr}'`,
-      ],
-      paymentMotes: "3000000000",
+      args,
+      paymentMotes: 3_000_000_000n,
     });
 
     // Mirror the on-chain listing in SQLite for the orders UI

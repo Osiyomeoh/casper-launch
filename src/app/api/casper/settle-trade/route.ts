@@ -3,37 +3,15 @@
  * Buyer authorizes via signMessage; agent handles CSPR transfer + yield settlement.
  *
  * Body: { orderId, buyerPublicKey, paymentHash }
- *   paymentHash: null → agent sends CSPR (testnet demo mode)
+ *   paymentHash: null → agent-pays mode is not supported server-side; return error
  *   paymentHash: string → wait for buyer's on-chain deploy to confirm
  */
 import { NextResponse } from "next/server";
 import { getOrder, updateOrder, getToken, upsertToken } from "@/lib/db";
 import { waitForDeploy } from "@/lib/casper-rpc";
-import { accountHashFromPublicKey, submitRegisterHolder, AGENT_KEY } from "@/lib/casper-cli";
-import { spawnSync } from "child_process";
+import { accountHashFromPublicKey, submitRegisterHolder } from "@/lib/casper-cli";
 
 const YIELD_HASH = process.env.NEXT_PUBLIC_YIELD_HASH ?? "";
-const CHAIN = process.env.NEXT_PUBLIC_CASPER_CHAIN ?? "casper-test";
-const NODE = process.env.NEXT_PUBLIC_CASPER_NODE ?? "https://node.testnet.casper.network/rpc";
-
-function agentTransfer(sellerPublicKey: string, csprAmount: number): string {
-  const motes = BigInt(Math.ceil(csprAmount * 1_000_000_000)).toString();
-  const sellerHash = `account-hash-${accountHashFromPublicKey(sellerPublicKey)}`;
-  const r = spawnSync("casper-client", [
-    "transfer",
-    "--chain-name", CHAIN,
-    "--node-address", NODE,
-    "--secret-key", AGENT_KEY,
-    "--amount", motes,
-    "--target-account", sellerHash,
-    "--transfer-id", Date.now().toString().slice(-8),
-    "--payment-amount", "100000000",
-  ], { encoding: "utf8", timeout: 30_000 });
-  const out = (r.stdout ?? "") + (r.stderr ?? "");
-  if (r.status !== 0) throw new Error(`Agent transfer failed: ${out.slice(0, 300)}`);
-  const match = out.match(/"deploy_hash"\s*:\s*"([0-9a-f]{64})"/i);
-  return match?.[1] ?? "agent-transfer-ok";
-}
 
 export async function POST(req: Request) {
   try {
@@ -54,11 +32,13 @@ export async function POST(req: Request) {
       console.log("[settle] waiting for buyer payment:", paymentHash);
       await waitForDeploy(paymentHash, 240_000);
     } else {
-      // Agent-pays mode: agent sends CSPR directly to seller on behalf of buyer
-      console.log("[settle] agent sending CSPR to seller:", order.seller_wallet);
-      const txHash = agentTransfer(order.seller_wallet, order.cspr_amount);
-      console.log("[settle] agent transfer submitted:", txHash);
-      if (txHash !== "agent-transfer-ok") await waitForDeploy(txHash, 240_000);
+      // Agent-pays mode: direct server-side CSPR transfer is not supported on Vercel
+      // (no casper-client binary). The client-side flow via /api/casper/make-transfer
+      // should be used instead — the browser signs and submits the transfer deploy.
+      return NextResponse.json(
+        { error: "Direct agent transfer not supported in this environment. Use the client-side transfer flow (paymentHash required)." },
+        { status: 400 }
+      );
     }
     console.log("[settle] payment confirmed");
 
@@ -70,9 +50,9 @@ export async function POST(req: Request) {
     const sellerHash = accountHashFromPublicKey(order.seller_wallet);
 
     // Submit on-chain: register buyer, reduce seller
-    const buyerSettleHash = submitRegisterHolder(YIELD_HASH, buyerHash, order.bps);
+    const buyerSettleHash = await submitRegisterHolder(YIELD_HASH, buyerHash, order.bps);
     const sellerNewBps = Math.max(0, (token.holders.find(h => h.publicKey === order.seller_wallet)?.bps ?? 0) - order.bps);
-    const sellerSettleHash = submitRegisterHolder(YIELD_HASH, sellerHash, sellerNewBps);
+    const sellerSettleHash = await submitRegisterHolder(YIELD_HASH, sellerHash, sellerNewBps);
 
     console.log("[settle] waiting for cap table settlement:", buyerSettleHash, sellerSettleHash);
     await Promise.all([
