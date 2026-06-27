@@ -15,7 +15,10 @@ import {
   TransactionEntryPoint,
   TransactionScheduling,
   TransactionTarget,
-  ContractHash,
+  TransactionInvocationTarget,
+  StoredTarget,
+  TransactionRuntime,
+  Hash,
   PaymentLimitedMode,
   PricingMode,
   Args,
@@ -74,9 +77,13 @@ export async function putTransaction(callArgs: ContractCallArgs): Promise<string
   const publicKey   = privateKey.publicKey;
   const initiatorAddr = new InitiatorAddr(publicKey);
 
-  const target = TransactionTarget.newTransactionTargetFromSession({
-    storedContractByHash: { hash: ContractHash.newContract(contractHash) },
-  });
+  const invTarget = new TransactionInvocationTarget();
+  invTarget.byHash = Hash.fromHex(contractHash);
+  const storedTarget = new StoredTarget();
+  storedTarget.id = invTarget;
+  storedTarget.runtime = TransactionRuntime.vmCasperV1();
+  const target = new TransactionTarget();
+  target.stored = storedTarget;
 
   const pricing = new PricingMode();
   const limited = new PaymentLimitedMode();
