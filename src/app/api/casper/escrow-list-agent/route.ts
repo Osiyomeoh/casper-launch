@@ -28,7 +28,7 @@ export async function POST(req: Request) {
       contractHash: ESCROW_HASH,
       entryPoint: "list",
       args,
-      paymentMotes: 3_000_000_000n,
+      paymentMotes: 20_000_000_000n,
     });
 
     const order = await createOrder({

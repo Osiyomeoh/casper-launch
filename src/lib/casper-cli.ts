@@ -122,7 +122,7 @@ export async function putTransaction(callArgs: ContractCallArgs): Promise<string
     result?: { transaction_hash?: { Version1?: string; Deploy?: string } };
     error?: { code?: number; message?: string };
   };
-  if (rpcData.error) throw new Error(`Code: ${rpcData.error.code}, err: ${rpcData.error.message}`);
+  if (rpcData.error) throw new Error(`Code: ${rpcData.error.code}, err: ${rpcData.error.message}, data: ${JSON.stringify((rpcData.error as Record<string,unknown>).data ?? '')}`);
   const hash = rpcData.result?.transaction_hash?.Version1 ?? rpcData.result?.transaction_hash?.Deploy ?? "";
   if (!hash) throw new Error(`No hash in RPC response: ${JSON.stringify(rpcData)}`);
   return hash;
