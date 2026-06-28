@@ -7,9 +7,9 @@ const SECTIONS = [
     id: "abstract",
     title: "1. Abstract",
     icon: "description",
-    content: `CasperLaunch is a blockchain-based platform for the tokenization, trading, and yield distribution of real-world assets — built on the Casper Network. It enables fractional ownership of physical assets including real estate, commodities, treasury instruments, and invoices, making them accessible to any investor globally regardless of technical background or capital size.
+    content: `CasperLaunch is a blockchain-based platform for the tokenization, trading, and yield distribution of real-world assets, built on the Casper Network. It enables fractional ownership of physical assets including real estate, commodities, treasury instruments, and invoices, making them accessible to any investor globally regardless of technical background or capital size.
 
-The platform combines an AI agent for metadata extraction and autonomous yield distribution, a CEP-78 NFT standard for on-chain asset representation, an x402 micropayment protocol for AI service monetization, and Privy embedded wallets for web2 user onboarding — all deployed on the Casper blockchain.`,
+The platform combines an AI agent for metadata extraction and autonomous yield distribution, a CEP-78 NFT standard for on-chain asset representation, an x402 micropayment protocol for AI service monetization, and Privy embedded wallets for web2 user onboarding. All components are deployed on the Casper blockchain.`,
   },
   {
     id: "problem",
@@ -17,9 +17,9 @@ The platform combines an AI agent for metadata extraction and autonomous yield d
     icon: "error_outline",
     content: `An estimated $326 trillion in real-world assets exists globally. The vast majority is inaccessible to ordinary investors. Real estate, commercial property, farmland, and infrastructure assets require minimum investments ranging from $50,000 to several million dollars, complex legal processes involving lawyers and notaries, long settlement periods of 30 to 90 days, and zero liquidity once invested.
 
-Across Africa — from Ghana and Kenya to Egypt and South Africa — high-value real estate exists in abundance but the mechanisms to invest in it at scale do not. A diaspora investor who wants to own African real estate must navigate local agents, title disputes, foreign currency restrictions, and a lack of transparent pricing.
+Across Africa, from Ghana and Kenya to Egypt and South Africa, high-value real estate exists in abundance but the mechanisms to invest in it at scale do not. A diaspora investor who wants to own African real estate must navigate local agents, title disputes, foreign currency restrictions, and a lack of transparent pricing.
 
-Traditional real estate investment vehicles — REITs, property funds, SPV syndicates — require investors to trust a fund manager, a custodian, a law firm, and an auditor simultaneously. In many markets that trust is routinely violated. Yield is misreported. Capital is misappropriated. Investors have no independent verification mechanism.`,
+Traditional real estate investment vehicles such as REITs, property funds, and SPV syndicates require investors to trust a fund manager, a custodian, a law firm, and an auditor simultaneously. In many markets that trust is routinely violated. Yield is misreported. Capital is misappropriated. Investors have no independent verification mechanism.`,
   },
   {
     id: "solution",
@@ -27,23 +27,23 @@ Traditional real estate investment vehicles — REITs, property funds, SPV syndi
     icon: "lightbulb",
     content: `CasperLaunch addresses each problem with a layered approach:
 
-• High minimum investment → Fractional CEP-78 tokens — own from 0.01% of any asset
-• Complex legal process → AI agent extracts metadata, SPV structure handles legal title
-• No liquidity → On-chain secondary marketplace with instant settlement
-• Zero transparency → Every transaction on public Casper blockchain, independently verifiable
-• Trust in intermediaries → Smart contracts enforce all rules — no human discretion in distributions
-• Crypto knowledge required → Privy embedded wallets — sign in with email or Google, no extension needed
-• Geographic barriers → Any wallet, anywhere, subject only to jurisdiction-specific eligibility rules`,
+• High minimum investment: Fractional CEP-78 tokens; own from 0.01% of any asset
+• Complex legal process: AI agent extracts metadata; SPV structure handles legal title
+• No liquidity: On-chain secondary marketplace with instant settlement
+• Zero transparency: Every transaction on public Casper blockchain, independently verifiable
+• Trust in intermediaries: Smart contracts enforce all rules with no human discretion in distributions
+• Crypto knowledge required: Privy embedded wallets; sign in with email or Google, no extension needed
+• Geographic barriers: Any wallet, anywhere, subject only to jurisdiction-specific eligibility rules`,
   },
   {
     id: "market",
     title: "4. Market Opportunity",
     icon: "trending_up",
-    content: `The tokenized RWA market is projected to reach $10 trillion by 2030 according to Boston Consulting Group estimates. Real estate represents the largest segment — approximately 60% of the total addressable market.
+    content: `The tokenized RWA market is projected to reach $10 trillion by 2030 according to Boston Consulting Group estimates. Real estate represents the largest segment, approximately 60% of the total addressable market.
 
-Africa has a housing deficit of over 50 million units. Urban real estate across the continent — from Nairobi and Accra to Cairo and Johannesburg — consistently delivers 8–15% annual rental yields, significantly above returns available in developed markets. Yet foreign and diaspora investment is structurally constrained by opacity and legal friction.
+Africa has a housing deficit of over 50 million units. Urban real estate across the continent, from Nairobi and Accra to Cairo and Johannesburg, consistently delivers 8 to 15% annual rental yields, significantly above returns available in developed markets. Yet foreign and diaspora investment is structurally constrained by opacity and legal friction.
 
-Casper's enterprise-grade blockchain — with predictable gas costs, formal verification support, and a permissioned account model — is uniquely positioned for regulated asset tokenization.`,
+Casper's enterprise-grade blockchain, with predictable gas costs, formal verification support, and a permissioned account model, is uniquely positioned for regulated asset tokenization.`,
   },
   {
     id: "contracts",
@@ -52,10 +52,10 @@ Casper's enterprise-grade blockchain — with predictable gas costs, formal veri
     content: `All contracts are written in Rust, compiled to WebAssembly, and deployed on the Casper Network.
 
 RWA NFT Contract (CEP-78)
-The core asset representation contract. Each minted token represents fractional or whole ownership of a real-world asset. Key entry points: mint(), transfer(), add_to_whitelist(), update_metadata(), register_holder().
+The core asset representation contract. Each minted token represents fractional or whole ownership of a real-world asset. Entry points: mint(), transfer(), add_to_whitelist(), update_metadata(), register_holder().
 
 Yield Distributor Contract
-Manages yield pool collection and proportional distribution to all registered holders. Distribution formula: holder_share = (holder_bps / 10000) × pool_balance × (1 - platform_fee). Key entry points: deposit(), distribute(), claim(), register_holder().
+Manages yield pool collection and proportional distribution to all registered holders. Distribution formula: holder_share = (holder_bps / 10000) x pool_balance x (1 - platform_fee). Entry points: deposit(), distribute(), claim(), register_holder().
 
 Governance Contract
 On-chain proposal and voting system. Standard proposals require 51% quorum. Parameter changes require 66% supermajority. Asset sales require 75% supermajority. All passed proposals enter a 48-hour time-lock before execution.`,
@@ -65,21 +65,21 @@ On-chain proposal and voting system. Standard proposals require 51% quorum. Para
     title: "6. AI Agent Layer",
     icon: "smart_toy",
     content: `Asset Tokenization Agent
-Powered by Google Gemini 2.0 Flash. When a user describes an asset in natural language, the agent extracts structured CEP-78 metadata, validates it against a schema, checks KYC status on-chain, constructs a mint transaction, and submits it to the Casper network. Access is gated by the x402 micropayment protocol — 3 CSPR on-chain before AI processing begins.
+Powered by Google Gemini 2.0 Flash. When a user describes an asset in natural language, the agent extracts structured CEP-78 metadata, validates it against a schema, checks KYC status on-chain, constructs a mint transaction, and submits it to the Casper network. Access is gated by the x402 micropayment protocol: 3 CSPR on-chain before AI processing begins.
 
 Autonomous Yield Distribution Agent
-Runs as a persistent server-side process booted automatically on server start. Every 30 seconds it queries the yield distributor contract. When the pool balance exceeds the threshold, it autonomously signs and submits a distribute() transaction — no human approval required. The agent's authority is limited by the smart contract.`,
+Runs as a persistent server-side process booted automatically on server start. Every 30 seconds it queries the yield distributor contract. When the pool balance exceeds the threshold, it autonomously signs and submits a distribute() transaction with no human approval required. The agent's authority is limited by the smart contract.`,
   },
   {
     id: "wallets",
     title: "7. Wallet Infrastructure",
     icon: "account_balance_wallet",
-    content: `Privy — Web2 Onboarding
-CasperLaunch integrates Privy for embedded wallet creation. A user with no blockchain experience signs in with their Google account or email, receives an embedded Casper wallet created silently by Privy, and can immediately buy fractional property, earn yield, and vote on governance proposals. The embedded wallet is non-custodial — Privy uses threshold cryptography so no single party holds the full key.
+    content: `Privy: Web2 Onboarding
+CasperLaunch integrates Privy for embedded wallet creation. A user with no blockchain experience signs in with their Google account or email, receives an embedded Casper wallet created silently by Privy, and can immediately buy fractional property, earn yield, and vote on governance proposals. The embedded wallet is non-custodial; Privy uses threshold cryptography so no single party holds the full key.
 
 In production, Privy connects to fiat on-ramps so users top up with a credit card and Privy handles CSPR conversion. A user who has never heard of blockchain can buy fractional real estate in under three minutes.
 
-CasperWallet — Native Crypto Users
+CasperWallet: Native Crypto Users
 Users with existing CasperWallet installations connect directly. Switching accounts updates all page data in real time without a refresh.`,
   },
   {
@@ -89,11 +89,11 @@ Users with existing CasperWallet installations connect directly. Switching accou
     content: `Listing
 A token holder creates a listing by specifying basis points to sell, asking price in USD, and minimum buyer holding period. The listing is recorded on-chain via the escrow contract. The seller's stake is locked until the listing expires or is filled.
 
-Buy Flow — Production
-Buyer signs and submits CSPR directly to the escrow contract. Escrow holds funds atomically. On confirmation, escrow calls transfer on the NFT contract. NFT transfer triggers register_holder on yield distributor via cross-contract call. Escrow releases CSPR to seller. Entire flow is atomic.
+Buy Flow: Production
+Buyer signs and submits CSPR directly to the escrow contract. Escrow holds funds atomically. On confirmation, escrow calls transfer on the NFT contract. NFT transfer triggers register_holder on yield distributor via cross-contract call. Escrow releases CSPR to seller. The entire flow is atomic.
 
 Transfer Restrictions
-The NFT contract enforces eligibility class checks, holding period locks, investor caps, and jurisdiction blocks — in contract code, not UI.`,
+The NFT contract enforces eligibility class checks, holding period locks, investor caps, and jurisdiction blocks in contract code, not UI.`,
   },
   {
     id: "yield",
@@ -160,17 +160,17 @@ Snapshot voting, 48-hour time-lock, 5-member multisig council veto, and 100 CSPR
     id: "roadmap",
     title: "13. Roadmap",
     icon: "map",
-    content: `Phase 1 — Testnet (Current)
-CEP-78 RWA NFT, yield distributor, and governance contracts deployed. AI tokenization with x402 payment gate. Privy + CasperWallet dual authentication. Secondary marketplace operational.
+    content: `Phase 1: Testnet (Current)
+CEP-78 RWA NFT, yield distributor, and governance contracts deployed. AI tokenization with x402 payment gate. Privy and CasperWallet dual authentication. Secondary marketplace operational.
 
-Phase 2 — Mainnet Beta (Q3 2026)
-Mainnet deployment with full security audit. First three assets tokenized — African residential properties. Real KYC via Fractal ID. Pyth Network oracle. Fiat on-ramp via MoonPay.
+Phase 2: Mainnet Beta (Q3 2026)
+Mainnet deployment with full security audit. First three assets tokenized: African residential properties. Real KYC via Fractal ID. Pyth Network oracle. Fiat on-ramp via MoonPay.
 
-Phase 3 — Regulated Launch (Q4 2026)
-Ghana SEC and Kenya CMA registration. UK FCA Appointed Representative status. Multi-asset support — treasury bills and trade invoices.
+Phase 3: Regulated Launch (Q4 2026)
+Ghana SEC and Kenya CMA registration. UK FCA Appointed Representative status. Multi-asset support including treasury bills and trade invoices.
 
-Phase 4 — Scale (2027)
-Pan-African expansion. Cross-chain bridge — Ethereum and Polygon. Asset-backed lending. Progressive governance decentralization. $100M total assets tokenized target.`,
+Phase 4: Scale (2027)
+Pan-African expansion. Cross-chain bridge to Ethereum and Polygon. Asset-backed lending. Progressive governance decentralization. $100M total assets tokenized target.`,
   },
 ];
 
@@ -212,7 +212,7 @@ export default function DocsPage() {
           </nav>
           {sidebarOpen && (
             <div className="p-4 border-t border-[rgba(100,255,218,0.08)]">
-              <p className="text-[9px] font-mono text-[#abb9d6] leading-relaxed">Version 1.0 — June 2026<br />Casper Agentic Buildathon</p>
+              <p className="text-[9px] font-mono text-[#abb9d6] leading-relaxed">Version 2.0 | June 2026<br />Casper Agentic Buildathon</p>
             </div>
           )}
         </aside>
