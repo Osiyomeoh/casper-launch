@@ -27,7 +27,7 @@ export async function POST(req: Request) {
     await updateOrder(orderId, { buyer_wallet: buyerPublicKey, payment_hash: paymentHash ?? "agent" });
 
     if (!paymentHash) {
-      return NextResponse.json({ error: "paymentHash required" }, { status: 400 });
+      return NextResponse.json({ error: `settle-v3: paymentHash missing (orderId=${orderId}, got=${JSON.stringify(paymentHash)})` }, { status: 400 });
     }
     // Agent submitted the payment tx — it's already accepted by the node.
     // No need to wait for finalization before settling yield rights.
