@@ -19,7 +19,7 @@ import {
   StoredTarget,
   TransactionRuntime,
   Hash,
-  PaymentLimitedMode,
+  FixedMode,
   PricingMode,
   Args,
   NamedArg,
@@ -86,11 +86,10 @@ export async function putTransaction(callArgs: ContractCallArgs): Promise<string
   target.stored = storedTarget;
 
   const pricing = new PricingMode();
-  const limited = new PaymentLimitedMode();
-  limited.paymentAmount = Number(paymentMotes);
-  limited.gasPriceTolerance = 5;
-  limited.standardPayment = true;
-  pricing.paymentLimited = limited;
+  const fixed = new FixedMode();
+  fixed.gasPriceTolerance = 5;
+  fixed.additionalComputationFactor = 0;
+  pricing.fixed = fixed;
 
   const payload = TransactionV1Payload.build({
     initiatorAddr,
@@ -151,11 +150,10 @@ export async function buildUnsignedTx(callArgs: {
   target.stored = storedTarget;
 
   const pricing = new PricingMode();
-  const limited = new PaymentLimitedMode();
-  limited.paymentAmount = Number(paymentMotes);
-  limited.gasPriceTolerance = 5;
-  limited.standardPayment = true;
-  pricing.paymentLimited = limited;
+  const fixed = new FixedMode();
+  fixed.gasPriceTolerance = 5;
+  fixed.additionalComputationFactor = 0;
+  pricing.fixed = fixed;
 
   const payload = TransactionV1Payload.build({
     initiatorAddr,
