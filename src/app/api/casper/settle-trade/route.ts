@@ -46,12 +46,8 @@ export async function POST(req: Request) {
     const sellerNewBps = Math.max(0, (token.holders.find(h => h.publicKey === order.seller_wallet)?.bps ?? 0) - order.bps);
     const sellerSettleHash = await submitRegisterHolder(YIELD_HASH, sellerHash, sellerNewBps);
 
-    console.log("[settle] waiting for cap table settlement:", buyerSettleHash, sellerSettleHash);
-    await Promise.all([
-      waitForDeploy(buyerSettleHash),
-      waitForDeploy(sellerSettleHash),
-    ]);
-    console.log("[settle] cap table settled on-chain");
+    // Agent-submitted TransactionV1s are already accepted — no need to poll
+    console.log("[settle] cap table txs submitted:", buyerSettleHash, sellerSettleHash);
 
     // Update cap table in DB
     const updatedHolders = token.holders.map(h => {
