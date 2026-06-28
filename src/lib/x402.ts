@@ -102,7 +102,7 @@ async function checkTransaction(deployHash: string): Promise<{ valid: boolean; r
         jsonrpc: "2.0",
         id: 1,
         method: "info_get_transaction",
-        params: { transaction_hash: { Deploy: deployHash }, finalized_approvals: true },
+        params: { transaction_hash: { Version1: deployHash }, finalized_approvals: true },
       }),
     });
 
