@@ -140,23 +140,15 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       ? result.signatureHex
       : `${sigPrefix}${result.signatureHex}`;
     const signedDeploy = { ...deployJson, approvals: [{ signer: publicKey, signature }] };
-    const res = await fetch("https://node.testnet.casper.network/rpc", {
+    const res = await fetch("/api/casper/submit-deploy", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        jsonrpc: "2.0", id: 1,
-        method: "account_put_deploy",
-        params: { deploy: signedDeploy },
-      }),
+      body: JSON.stringify({ deploy: signedDeploy }),
     });
-    const data = await res.json() as {
-      result?: { deploy_hash?: string };
-      error?: { code?: number; message?: string };
-    };
-    if (data.error) throw new Error(`Code: ${data.error.code}, err: ${data.error.message}`);
-    const hash = data.result?.deploy_hash;
-    if (!hash) throw new Error("No deploy hash returned");
-    return hash;
+    const data = await res.json() as { deploy_hash?: string; error?: string };
+    if (data.error) throw new Error(data.error);
+    if (!data.deploy_hash) throw new Error("No deploy hash returned");
+    return data.deploy_hash;
   }, [publicKey]);
 
   const signAndSubmit = useCallback(async (txJson: object): Promise<string> => {
