@@ -187,7 +187,7 @@ export default function TradePage() {
       <div className="p-4 md:p-8 space-y-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl md:text-3xl font-bold text-[#d8e2ff]">Trade</h1>
+            <h1 className="text-2xl md:text-3xl font-bold text-[#d8e2ff]">Trade <span className="text-xs text-[#4a5568] font-mono">v4</span></h1>
             <p className="text-sm text-[#abb9d6] mt-1">Buy and sell fractional RWA yield rights on Casper testnet — fully on-chain.</p>
           </div>
           <Link href="/orders" className="hidden sm:flex items-center gap-1.5 bg-[#112240] border border-[rgba(100,255,218,0.15)] text-[#64FFDA] px-4 py-2 rounded-lg text-xs font-mono hover:text-[#d8e2ff] transition-colors">
