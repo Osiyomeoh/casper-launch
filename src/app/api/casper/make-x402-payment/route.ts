@@ -29,7 +29,6 @@ import {
   Args,
   NamedArg,
   CLValue,
-  Key,
   InitiatorAddr,
   Duration,
   Timestamp,
@@ -74,12 +73,7 @@ export async function POST(req: Request) {
     const initiatorAddr = new InitiatorAddr(privateKey.publicKey);
 
     const treasuryPub = PublicKey.fromHex(TREASURY_PUBLIC_KEY);
-    const treasuryAH = treasuryPub.accountHash() as unknown as { hashBytes: Uint8Array };
-    const treasuryHashHex = Buffer.from(treasuryAH.hashBytes).toString("hex");
-
-    // Key.newKey("00" + 32-byte-hex) = Key::Account
-    const targetKey = Key.newKey("00" + treasuryHashHex);
-    const targetCL = CLValue.newCLKey(targetKey);
+    const targetCL = CLValue.newCLPublicKey(treasuryPub);
 
     const args = Args.fromNamedArgs([
       new NamedArg("target", targetCL),
