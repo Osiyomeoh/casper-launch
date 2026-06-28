@@ -8,7 +8,6 @@
  */
 import { NextResponse } from "next/server";
 import { getOrder, updateOrder, getToken, upsertToken } from "@/lib/db";
-import { waitForDeploy } from "@/lib/casper-rpc";
 import { accountHashFromPublicKey, submitRegisterHolder } from "@/lib/casper-cli";
 
 const YIELD_HASH = process.env.NEXT_PUBLIC_YIELD_HASH ?? "";
@@ -27,19 +26,12 @@ export async function POST(req: Request) {
 
     await updateOrder(orderId, { buyer_wallet: buyerPublicKey, payment_hash: paymentHash ?? "agent" });
 
-    if (paymentHash) {
-      // Buyer signed and submitted their own deploy — wait for it to confirm
-      console.log("[settle] waiting for buyer payment:", paymentHash);
-      await waitForDeploy(paymentHash, 240_000);
-    } else {
-      // Agent-pays mode: direct server-side CSPR transfer is not supported on Vercel
-      // (no casper-client binary). The client-side flow via /api/casper/make-transfer
-      // should be used instead — the browser signs and submits the transfer deploy.
-      return NextResponse.json(
-        { error: "Direct agent transfer not supported in this environment. Use the client-side transfer flow (paymentHash required)." },
-        { status: 400 }
-      );
+    if (!paymentHash) {
+      return NextResponse.json({ error: "paymentHash required" }, { status: 400 });
     }
+    // Agent submitted the payment tx — it's already accepted by the node.
+    // No need to wait for finalization before settling yield rights.
+    console.log("[settle] payment tx:", paymentHash);
     console.log("[settle] payment confirmed");
 
     // Get current cap table

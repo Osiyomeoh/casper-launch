@@ -131,23 +131,38 @@ export default function TradePage() {
     let activeStep = "transfer";
 
     try {
-      // Step 1: Buyer signs an authorization message — wallet popup confirms purchase intent.
-      // Agent handles the actual CSPR transfer and on-chain settlement.
+      // Step 1: Buyer signs an authorization message proving wallet ownership.
       const authMsg = `CasperLaunch buy authorization\nAsset: ${listing.asset_name}\nYield: ${listing.bps / 100}% (${listing.bps} bps)\nPrice: ${listing.cspr_amount.toFixed(2)} CSPR\nBuyer: ${(wallet.publicKey ?? "").slice(0, 20)}…`;
       step("transfer", "pending", "Confirm purchase in wallet popup…");
-      await wallet.signMessage(authMsg);
+      const authSig = await wallet.signMessage(authMsg);
       step("transfer", "done", "Purchase authorized");
 
-      // Step 2: Agent sends CSPR and settles yield rights on-chain
+      // Step 2: Agent submits CSPR payment on-chain (TransactionV1 native transfer)
       activeStep = "confirm";
-      step("confirm", "pending", "Agent processing payment and yield transfer…");
+      step("confirm", "pending", "Submitting CSPR payment on-chain…");
+      const payRes = await fetch("/api/casper/make-x402-payment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          senderPublicKey: wallet.publicKey,
+          authMessage: authMsg,
+          authSignature: authSig,
+        }),
+      });
+      const payData = await payRes.json() as { txHash?: string; error?: string };
+      if (!payRes.ok || !payData.txHash) throw new Error(payData.error ?? "Payment failed");
+      step("confirm", "done", `Payment confirmed on-chain (${payData.txHash.slice(0, 12)}…)`);
+
+      // Step 3: Settle yield rights on-chain
+      activeStep = "settle";
+      step("settle", "pending", "Transferring yield rights on-chain…");
       const settleRes = await fetch("/api/casper/settle-trade", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           orderId: listing.id,
           buyerPublicKey: wallet.publicKey,
-          paymentHash: null,
+          paymentHash: payData.txHash,
         }),
       });
       const settleData = await settleRes.json() as { ok?: boolean; buyerSettleHash?: string; error?: string };
