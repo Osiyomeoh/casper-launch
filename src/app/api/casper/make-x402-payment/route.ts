@@ -30,7 +30,7 @@ export async function POST(req: Request) {
       transferAmount: PAYMENT_MOTES,
       chainName: CHAIN,
       paymentAmount: GAS_MOTES,
-      memo: `x402:ai-tokenize:${Date.now()}`,
+      memo: String(Date.now() % 1_000_000),
     });
 
     return NextResponse.json({
