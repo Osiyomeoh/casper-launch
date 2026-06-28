@@ -150,7 +150,8 @@ export default function TradePage() {
         }),
       });
       const payData = await payRes.json() as { txHash?: string; error?: string };
-      if (!payRes.ok || !payData.txHash) throw new Error(payData.error ?? "Payment failed");
+      if (!payRes.ok) throw new Error(`Payment http ${payRes.status}: ${payData.error ?? JSON.stringify(payData)}`);
+      if (!payData.txHash) throw new Error(`Payment returned no txHash: ${JSON.stringify(payData)}`);
       step("confirm", "done", `Payment confirmed on-chain (${payData.txHash.slice(0, 12)}…)`);
 
       // Step 3: Settle yield rights on-chain
