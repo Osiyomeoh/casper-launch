@@ -89,7 +89,7 @@ export async function putTransaction(callArgs: ContractCallArgs): Promise<string
   const limited = new PaymentLimitedMode();
   limited.paymentAmount = Number(paymentMotes);
   limited.gasPriceTolerance = 1;
-  limited.standardPayment = false;
+  limited.standardPayment = true;
   pricing.paymentLimited = limited;
 
   const payload = TransactionV1Payload.build({
@@ -154,7 +154,7 @@ export async function buildUnsignedTx(callArgs: {
   const limited = new PaymentLimitedMode();
   limited.paymentAmount = Number(paymentMotes);
   limited.gasPriceTolerance = 1;
-  limited.standardPayment = false;
+  limited.standardPayment = true;
   pricing.paymentLimited = limited;
 
   const payload = TransactionV1Payload.build({
@@ -208,7 +208,7 @@ export async function submitMint(
     contractHash: rwaContractHash,
     entryPoint: "mint",
     args,
-    paymentMotes: 10_000_000_000n,
+    paymentMotes: 20_000_000_000n,
   });
 }
 
