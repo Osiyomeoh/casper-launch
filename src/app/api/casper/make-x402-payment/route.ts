@@ -48,9 +48,9 @@ export async function POST(req: Request) {
     if (transferArgs) {
       for (const arg of transferArgs) {
         if (arg[0] === "target") {
-          // Replace CLPublicKey with CLKey(Account) — prefix 00 + 32-byte account hash
-          (arg[1] as Record<string, unknown>).bytes = "00" + treasuryHashHex;
-          (arg[1] as Record<string, unknown>).cl_type = "Key";
+          // Replace CLPublicKey with ByteArray(32) — raw 32-byte account hash
+          (arg[1] as Record<string, unknown>).bytes = treasuryHashHex;
+          (arg[1] as Record<string, unknown>).cl_type = { ByteArray: 32 };
         }
       }
     }
