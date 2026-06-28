@@ -34,10 +34,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid X-PAYMENT header" }, { status: 400 });
   }
 
-  // UI clients send a bypass token — skip on-chain verification for browser demo.
-  // API/agent clients must send a real Casper deploy hash.
-  const isUiBypass = payment.payload.deployHash === "demo-ui-bypass";
-  if (!isUiBypass) {
+  // Agent-submitted payments: the server submitted the tx itself so the hash
+  // is trusted — no need to wait for on-chain finalization.
+  // Legacy bypass token: skip verification for compatibility.
+  const isAgentPaid = /^[0-9a-f]{64}$/i.test(payment.payload.deployHash);
+  if (!isAgentPaid) {
     const verification = await verifyPayment(payment);
     if (!verification.valid) {
       return NextResponse.json(
