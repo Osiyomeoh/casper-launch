@@ -10,7 +10,7 @@ import { NextResponse } from "next/server";
 import { makeCsprTransferDeploy, Deploy } from "casper-js-sdk";
 
 const CHAIN = "casper-test";
-const PAYMENT_MOTES = "1000000000"; // 1 CSPR
+const PAYMENT_MOTES = "3000000000"; // 3 CSPR (testnet minimum transfer is 2.5 CSPR)
 const GAS_MOTES = "100000000";      // 0.1 CSPR gas
 
 // Platform treasury — agent public key
