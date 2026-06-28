@@ -152,7 +152,7 @@ export default function AgentPage() {
               <div className="text-sm font-bold text-[#FFD600] mb-1">x402 Payment Protocol Active</div>
               <div className="text-xs text-[#abb9d6] leading-relaxed">
                 The AI tokenization endpoint (<code className="font-mono text-[#d8e2ff]">/api/ai/tokenize</code>) is protected by Casper-native x402 micropayments.
-                Each AI analysis costs <strong className="text-[#d8e2ff]">1 CSPR</strong> — paid on-chain before the request is processed.
+                Each AI analysis costs <strong className="text-[#d8e2ff]">3 CSPR</strong> — paid on-chain before the request is processed.
                 Payment is verified by querying the Casper testnet RPC before any AI compute runs.
               </div>
             </div>

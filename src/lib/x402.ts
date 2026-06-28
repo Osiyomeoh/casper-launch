@@ -3,7 +3,7 @@
 
 const CASPER_TESTNET_RPC = "https://node.testnet.casper.network/rpc";
 const AGENT_ACCOUNT = "01e208d198c18d6bd1802c90ae44173393a18d16cbe70144ead27018d237888c2a";
-const PAYMENT_MOTES = "1000000000"; // 1 CSPR
+const PAYMENT_MOTES = "3000000000"; // 3 CSPR
 
 export type X402PaymentRequirement = {
   scheme: "casper-exact";
@@ -34,7 +34,7 @@ export function buildPaymentRequirement(resource: string): X402PaymentRequiremen
     network: "casper-test",
     maxAmountRequired: PAYMENT_MOTES,
     resource,
-    description: "AI RWA Asset Tokenization — 1 CSPR per request",
+    description: "AI RWA Asset Tokenization — 3 CSPR per request",
     mimeType: "application/json",
     payTo: AGENT_ACCOUNT,
     maxTimeoutSeconds: 300,

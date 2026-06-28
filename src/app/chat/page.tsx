@@ -133,14 +133,14 @@ export default function ChatPage() {
         return;
       }
 
-      addMessage("agent", isRevision ? "Re-analyzing with your corrections..." : "AI tokenization costs 1 CSPR. Preparing payment...");
+      addMessage("agent", isRevision ? "Re-analyzing with your corrections..." : "AI tokenization costs 3 CSPR. Preparing payment...");
       try {
         // ── x402 Payment Gate ──────────────────────────────────────────────
         if (!wallet.isConnected || !wallet.publicKey) {
-          throw new Error("Connect your CasperWallet to pay for AI tokenization (1 CSPR)");
+          throw new Error("Connect your CasperWallet to pay for AI tokenization (3 CSPR)");
         }
 
-        // 1. Build unsigned 1 CSPR transfer Deploy to platform treasury
+        // 1. Build unsigned 3 CSPR transfer Deploy to platform treasury
         const payRes = await fetch("/api/casper/make-x402-payment", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -150,7 +150,7 @@ export default function ChatPage() {
         if (!payRes.ok || !payData.deployJson) throw new Error(payData.error ?? "Failed to build payment deploy");
 
         // 2. User signs + submits the transfer in CasperWallet — wallet popup appears
-        addMessage("agent", "Approve the 1 CSPR payment in your CasperWallet...");
+        addMessage("agent", "Approve the 3 CSPR payment in your CasperWallet...");
         const deployHash = await wallet.signAndSubmitDeploy(payData.deployJson);
 
         addMessage("agent", `Payment confirmed (${deployHash.slice(0, 12)}…). Extracting metadata...`);

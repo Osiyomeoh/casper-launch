@@ -65,7 +65,7 @@ On-chain proposal and voting system. Standard proposals require 51% quorum. Para
     title: "AI Agent Layer",
     icon: "smart_toy",
     content: `Asset Tokenization Agent
-Powered by Google Gemini 2.0 Flash. When a user describes an asset in natural language, the agent extracts structured CEP-78 metadata, validates it against a schema, checks KYC status on-chain, constructs a mint transaction, and submits it to the Casper network. Access is gated by the x402 micropayment protocol — 1 CSPR on-chain before AI processing begins.
+Powered by Google Gemini 2.0 Flash. When a user describes an asset in natural language, the agent extracts structured CEP-78 metadata, validates it against a schema, checks KYC status on-chain, constructs a mint transaction, and submits it to the Casper network. Access is gated by the x402 micropayment protocol — 3 CSPR on-chain before AI processing begins.
 
 Autonomous Yield Distribution Agent
 Runs as a persistent server-side process booted automatically on server start. Every 30 seconds it queries the yield distributor contract. When the pool balance exceeds the threshold, it autonomously signs and submits a distribute() transaction — no human approval required. The agent's authority is limited by the smart contract — it can only call distribute(), not modify holder registries or contract parameters.`,

@@ -94,7 +94,7 @@ Casper's enterprise-grade blockchain — with predictable gas costs, formal veri
 
 CasperLaunch generates revenue across five streams:
 
-### 5.1 AI Access Fee — 1 CSPR per Tokenization Request (x402)
+### 5.1 AI Access Fee — 3 CSPR per Tokenization Request (x402)
 
 Every AI tokenization request is gated by the x402 micropayment protocol, implemented natively on Casper. The `/api/ai/tokenize` endpoint returns HTTP 402 with a Casper payment requirement if no `X-PAYMENT` header is present.
 
@@ -102,7 +102,7 @@ Every AI tokenization request is gated by the x402 micropayment protocol, implem
 ```
 Client → POST /api/ai/tokenize (no payment header)
 Server → 402 { accepts: [{ scheme: "casper-exact", payTo: "01e208...", maxAmountRequired: "1000000000" }] }
-Client → builds unsigned 1 CSPR transfer Deploy via /api/casper/make-x402-payment
+Client → builds unsigned 3 CSPR transfer Deploy via /api/casper/make-x402-payment
 Client → user signs Deploy in CasperWallet → submitted on-chain → deploy hash returned
 Client → POST /api/ai/tokenize + X-PAYMENT: base64({ deployHash, from: publicKey })
 Server → verifies deploy on testnet via info_get_transaction → runs Gemini AI
@@ -110,7 +110,7 @@ Server → verifies deploy on testnet via info_get_transaction → runs Gemini A
 
 This is a Casper-native implementation of the x402 protocol — the first on a non-EVM chain. Every AI inference is backed by an on-chain payment record. No payment, no AI access.
 
-**Current status:** Live on testnet. The 1 CSPR payment is a real on-chain transfer — not a demo bypass.
+**Current status:** Live on testnet. The 3 CSPR payment is a real on-chain transfer — not a demo bypass.
 
 ### 5.2 Tokenization Fee — 0.5% of Asset Valuation
 
@@ -283,7 +283,7 @@ Powered by Google Gemini 2.0 Flash (via Groq inference). When a user describes a
 
 **Payment gate (x402 — live):**
 1. `/api/ai/tokenize` returns HTTP 402 with Casper payment requirement
-2. Client calls `/api/casper/make-x402-payment` → server builds unsigned 1 CSPR transfer Deploy
+2. Client calls `/api/casper/make-x402-payment` → server builds unsigned 3 CSPR transfer Deploy
 3. User signs the Deploy in CasperWallet (`provider.sign` — Deploy format, Casper 1.x)
 4. Deploy submitted on-chain via `account_put_deploy` → deploy hash returned
 5. Client sends `X-PAYMENT: base64({ deployHash, from: publicKey })` header
@@ -316,7 +316,7 @@ Step 1 — Asset Description
 
 Step 2 — x402 Payment (live on testnet)
   Server returns HTTP 402 with Casper payment requirement
-  /api/casper/make-x402-payment builds unsigned 1 CSPR transfer Deploy
+  /api/casper/make-x402-payment builds unsigned 3 CSPR transfer Deploy
   CasperWallet popup: user approves and signs (Deploy format, Casper 1.x)
   Deploy submitted on-chain → deploy hash returned
   Client sends deploy hash as X-PAYMENT header
@@ -536,7 +536,7 @@ Before mainnet deployment:
 - CEP-78 RWA NFT contract deployed and operational
 - Yield distributor with autonomous agent
 - Governance contract with on-chain voting
-- **x402 payment gate live** — real 1 CSPR on-chain payment required before AI runs
+- **x402 payment gate live** — real 3 CSPR on-chain payment required before AI runs
 - First Casper-native x402 implementation (non-EVM)
 - AI tokenization via Gemini 2.0 Flash (Groq inference)
 - CasperWallet integration (Deploy format for user payments, TransactionV1 for agent calls)

@@ -17,11 +17,11 @@ CasperLaunch lets anyone tokenize a real-world asset — property, farmland, com
 ## Agentic AI Features
 
 ### 1. AI Asset Tokenization (x402-gated)
-Describe your asset in plain English. The AI extracts structured CEP-78 metadata and guides you through the full minting flow. Access costs **1 CSPR**, paid on-chain before the AI runs.
+Describe your asset in plain English. The AI extracts structured CEP-78 metadata and guides you through the full minting flow. Access costs **3 CSPR**, paid on-chain before the AI runs.
 
 ```
 1. User describes asset in chat
-2. Server returns HTTP 402 + payment requirement (payTo, amount: 1 CSPR)
+2. Server returns HTTP 402 + payment requirement (payTo, amount: 3 CSPR)
 3. Platform builds unsigned CSPR transfer Deploy
 4. CasperWallet popup — user approves and signs (Deploy format, Casper 1.x)
 5. Deploy submitted on-chain → deploy hash returned
@@ -50,7 +50,7 @@ Fractional yield shares can be listed for sale on the escrow contract. Transfer 
 
 | Stream | Rate | Status |
 |--------|------|--------|
-| AI access fee (x402) | 1 CSPR per tokenization request | **Live — on-chain payment required** |
+| AI access fee (x402) | 3 CSPR per tokenization request | **Live — on-chain payment required** |
 | Tokenization fee | 0.5% of asset valuation | Displayed at mint |
 | Secondary market spread | 0.25% per trade | Planned |
 | Yield distribution fee | 5% of distributed yield | In contract formula |
@@ -127,7 +127,7 @@ This is a testnet workaround. Once CasperWallet ships `signTransaction` support 
 
 ```
 1. Describe asset in chat
-2. CasperWallet popup — sign 1 CSPR transfer to platform treasury (x402 payment)
+2. CasperWallet popup — sign 3 CSPR transfer to platform treasury (x402 payment)
 3. Deploy hash returned → sent as X-PAYMENT header to AI endpoint
 4. Server verifies payment on-chain → Gemini AI extracts CEP-78 metadata
 5. Upload backing document → SHA-256 hash anchored on IPFS
