@@ -16,6 +16,8 @@ export interface WalletActions {
   signMessage: (message: string) => Promise<string>;
   signTransaction: (txJson: object) => Promise<string>;
   signAndSubmit: (txJson: object) => Promise<string>;
+  // Signs a Casper 1.x Deploy JSON and submits via account_put_deploy
+  signAndSubmitDeploy: (deployJson: Record<string, unknown>) => Promise<string>;
 }
 
 type WalletCtx = WalletState & WalletActions;
@@ -128,6 +130,35 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, [publicKey]);
 
   // Build approval, attach to tx, submit to Casper node, return deploy hash
+  const signAndSubmitDeploy = useCallback(async (deployJson: Record<string, unknown>): Promise<string> => {
+    const provider = getProvider();
+    if (!provider || !publicKey) throw new Error("Wallet not connected");
+    const result = await provider.sign(JSON.stringify(deployJson), publicKey);
+    if (result.cancelled) throw new Error("User cancelled");
+    const sigPrefix = publicKey.startsWith("02") ? "02" : "01";
+    const signature = /^0[12]/i.test(result.signatureHex)
+      ? result.signatureHex
+      : `${sigPrefix}${result.signatureHex}`;
+    const signedDeploy = { ...deployJson, approvals: [{ signer: publicKey, signature }] };
+    const res = await fetch("https://node.testnet.casper.network/rpc", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0", id: 1,
+        method: "account_put_deploy",
+        params: { deploy: signedDeploy },
+      }),
+    });
+    const data = await res.json() as {
+      result?: { deploy_hash?: string };
+      error?: { code?: number; message?: string };
+    };
+    if (data.error) throw new Error(`Code: ${data.error.code}, err: ${data.error.message}`);
+    const hash = data.result?.deploy_hash;
+    if (!hash) throw new Error("No deploy hash returned");
+    return hash;
+  }, [publicKey]);
+
   const signAndSubmit = useCallback(async (txJson: object): Promise<string> => {
     const sigHex = await signTransaction(txJson);
     // ED25519 signatures are prefixed with "01" in Casper's approval format
@@ -169,6 +200,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       signMessage,
       signTransaction,
       signAndSubmit,
+      signAndSubmitDeploy,
     }}>
       {children}
     </WalletContext.Provider>

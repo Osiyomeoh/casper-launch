@@ -133,16 +133,37 @@ export default function ChatPage() {
         return;
       }
 
-      addMessage("agent", isRevision ? "Re-analyzing with your corrections..." : "Analyzing your asset description — extracting CEP-78 metadata...");
+      addMessage("agent", isRevision ? "Re-analyzing with your corrections..." : "AI tokenization costs 1 CSPR. Preparing payment...");
       try {
-        const bypassHeader = Buffer.from(JSON.stringify({
+        // ── x402 Payment Gate ──────────────────────────────────────────────
+        if (!wallet.isConnected || !wallet.publicKey) {
+          throw new Error("Connect your CasperWallet to pay for AI tokenization (1 CSPR)");
+        }
+
+        // 1. Build unsigned 1 CSPR transfer Deploy to platform treasury
+        const payRes = await fetch("/api/casper/make-x402-payment", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ senderPublicKey: wallet.publicKey }),
+        });
+        const payData = await payRes.json() as { deployJson?: Record<string, unknown>; error?: string };
+        if (!payRes.ok || !payData.deployJson) throw new Error(payData.error ?? "Failed to build payment deploy");
+
+        // 2. User signs + submits the transfer in CasperWallet — wallet popup appears
+        addMessage("agent", "Approve the 1 CSPR payment in your CasperWallet...");
+        const deployHash = await wallet.signAndSubmitDeploy(payData.deployJson);
+
+        addMessage("agent", `Payment confirmed (${deployHash.slice(0, 12)}…). Extracting metadata...`);
+
+        // 3. Build X-PAYMENT header with the real on-chain deploy hash
+        const paymentHeader = Buffer.from(JSON.stringify({
           x402Version: 1, scheme: "casper-exact", network: "casper-test",
-          payload: { deployHash: "demo-ui-bypass", from: wallet.publicKey ?? "unknown" },
+          payload: { deployHash, from: wallet.publicKey },
         })).toString("base64");
 
         const res = await fetch("/api/ai/tokenize", {
           method: "POST",
-          headers: { "Content-Type": "application/json", "X-PAYMENT": bypassHeader },
+          headers: { "Content-Type": "application/json", "X-PAYMENT": paymentHeader },
           body: JSON.stringify({ description: text }),
         });
         const data = await res.json() as { metadata?: AssetMetadata; error?: string };
