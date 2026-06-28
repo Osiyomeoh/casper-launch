@@ -353,7 +353,9 @@ export default function ChatPage() {
         body: JSON.stringify({ walletPublicKey: wallet.publicKey, shareBps: 10_000 }),
       }).catch(() => {});
 
-      addMessage("agent", `Token minted on Casper testnet!\n\nDeploy hash: ${hash}\n\nYour RWA NFT is now live on-chain with${docHash ? " a verified backing document," : ""} accredited investor KYC, and compliant transfer restrictions.\n\nYou've been registered as 100% yield holder in the distributor contract. View the cap table to offer shares to investors →`);
+      const valuation = fullMetadata.valuation_usd ?? 0;
+      const platformFee = +(valuation * 0.005).toFixed(2);
+      addMessage("agent", `Token minted on Casper testnet!\n\nDeploy hash: ${hash}\n\nYour RWA NFT is now live on-chain with${docHash ? " a verified backing document," : ""} accredited investor KYC, and compliant transfer restrictions.\n\nYou've been registered as 100% yield holder in the distributor contract.\n\n---\n📋 **Platform Fee Summary**\n• Asset valuation: $${valuation.toLocaleString()}\n• Tokenization fee (0.5%): $${platformFee.toLocaleString()}\n• Fee collected by: CasperLaunch treasury\n\nView the cap table to offer shares to investors →`);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Mint failed";
       setError(msg);
