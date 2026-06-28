@@ -24,6 +24,98 @@ function shortKey(key: string) {
   return key ? `${key.slice(0, 10)}…${key.slice(-6)}` : "—";
 }
 
+// ── List for Sale panel (user signs & pays via CasperWallet) ─────────────────
+
+function ListForSalePanel({ tok, wallet }: { tok: TokenData; wallet: ReturnType<typeof useWallet> }) {
+  const ESCROW_HASH = process.env.NEXT_PUBLIC_ESCROW_HASH ?? "";
+  const [listBps, setListBps]       = useState("");
+  const [listPrice, setListPrice]   = useState("");
+  const [listLoading, setListLoading] = useState(false);
+  const [listResult, setListResult] = useState<{ ok: boolean; msg: string } | null>(null);
+
+  if (!ESCROW_HASH || tok.owner !== wallet.publicKey) return null;
+
+  const bpsNum   = Math.round(Number(listBps) * 100);
+  const priceUsd = Number(listPrice);
+  const priceCspr = priceUsd > 0 ? String(BigInt(Math.round(priceUsd * 2 * 1e9))) : ""; // rough CSPR/USD rate ~0.5
+
+  async function handleList() {
+    if (!wallet.publicKey || !wallet.signAndSubmit) return;
+    if (!bpsNum || bpsNum <= 0 || bpsNum >= 10_000 || !priceCspr) return;
+    setListLoading(true);
+    setListResult(null);
+    try {
+      // 1. Build unsigned tx on server (user is initiator)
+      const buildRes = await fetch("/api/casper/build-tx", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "escrow_list", initiatorPublicKey: wallet.publicKey, bps: bpsNum, price_cspr: priceCspr }),
+      }).then(r => r.json()) as { txJson?: object; error?: string };
+      if (buildRes.error || !buildRes.txJson) throw new Error(buildRes.error ?? "Failed to build transaction");
+
+      // 2. User signs and submits directly to Casper node
+      const txHash = await wallet.signAndSubmit(buildRes.txJson);
+
+      // 3. Record in DB
+      await fetch("/api/casper/escrow-list", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          token_id: tok.tokenId, bps: bpsNum, price_cspr: priceCspr,
+          price_usd: priceUsd, seller_wallet: wallet.publicKey,
+          asset_name: tok.metadata?.asset_name ?? tok.tokenId, tx_hash: txHash,
+        }),
+      });
+
+      setListResult({ ok: true, msg: `Listed on-chain ✓ — tx: ${txHash.slice(0, 16)}…` });
+      setListBps(""); setListPrice("");
+    } catch (e) {
+      setListResult({ ok: false, msg: e instanceof Error ? e.message : "Failed" });
+    }
+    setListLoading(false);
+  }
+
+  return (
+    <div className="bg-[#091b39] border border-[rgba(100,255,218,0.12)] rounded-xl p-5 space-y-4">
+      <div>
+        <p className="font-bold text-[#d8e2ff] text-sm">List Shares for Sale</p>
+        <p className="text-[11px] text-[#abb9d6] mt-1">
+          Create a public listing on the escrow contract. Buyers can purchase your yield shares directly on-chain. <strong>Your wallet pays gas.</strong>
+        </p>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="text-[10px] font-mono text-[#ebbbb4] uppercase">% to list</label>
+          <input value={listBps} onChange={e => setListBps(e.target.value)} placeholder="e.g. 20"
+            className="mt-1 w-full bg-[#112240] border border-[rgba(100,255,218,0.2)] rounded-lg px-3 py-2 text-sm text-[#d8e2ff] outline-none focus:border-[#64FFDA]" />
+        </div>
+        <div>
+          <label className="text-[10px] font-mono text-[#ebbbb4] uppercase">Price (USD)</label>
+          <input value={listPrice} onChange={e => setListPrice(e.target.value)} placeholder="e.g. 0.45"
+            className="mt-1 w-full bg-[#112240] border border-[rgba(100,255,218,0.2)] rounded-lg px-3 py-2 text-sm text-[#d8e2ff] outline-none focus:border-[#64FFDA]" />
+        </div>
+      </div>
+      {listResult && (
+        <div className={`text-[11px] font-mono px-3 py-2 rounded-lg ${listResult.ok ? "bg-[#00C853]/10 text-[#00C853] border border-[#00C853]/20" : "bg-[#FF0000]/10 text-[#ebbbb4] border border-[#FF0000]/20"}`}>
+          {listResult.ok ? "✓ " : "✗ "}{listResult.msg}
+        </div>
+      )}
+      <button
+        disabled={!listBps || !listPrice || listLoading || !wallet.isConnected}
+        onClick={handleList}
+        className="w-full py-3 bg-[#64FFDA] text-[#0a192f] font-bold text-sm rounded-xl hover:brightness-110 active:scale-95 transition-all disabled:opacity-40 flex items-center justify-center gap-2"
+      >
+        {listLoading
+          ? <><span className="animate-spin material-symbols-outlined text-[16px]">autorenew</span> Waiting for wallet signature…</>
+          : <><span className="material-symbols-outlined text-[16px]">storefront</span> Sign &amp; List on Escrow Contract →</>}
+      </button>
+      <p className="text-[10px] text-[#abb9d6]">
+        Your CasperWallet will prompt you to sign and pay gas. Agent is not involved.
+      </p>
+    </div>
+  );
+}
+
 export default function AssetDetailPage() {
   const { id } = useParams<{ id: string }>();
   const wallet = useWallet();
@@ -539,9 +631,12 @@ export default function AssetDetailPage() {
               : "Transfer Yield Rights to Investor →"}
           </button>
           <p className="text-[10px] text-[#abb9d6]">
-            Signed by the AI agent key. Only KYC-whitelisted wallets can receive yield shares. Transfer restrictions enforced on-chain.
+            KYC & share registration signed by the AI agent. Transfer restrictions enforced on-chain.
           </p>
         </div>
+
+        {/* ── Marketplace listing — user signs & pays ─────────────────────── */}
+        <ListForSalePanel tok={tok} wallet={wallet} />
 
         {/* Failed mint banner + re-mint */}
         {tok.deployStatus === "failed" && (

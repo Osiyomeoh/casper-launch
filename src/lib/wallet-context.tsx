@@ -14,6 +14,8 @@ export interface WalletActions {
   connect: () => void;
   disconnect: () => void;
   signMessage: (message: string) => Promise<string>;
+  signTransaction: (txJson: object) => Promise<string>;
+  signAndSubmit: (txJson: object) => Promise<string>;
 }
 
 type WalletCtx = WalletState & WalletActions;
@@ -110,6 +112,46 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   }, [publicKey]);
 
+  // Sign a TransactionV1 JSON with the connected wallet and return signature hex
+  const signTransaction = useCallback(async (txJson: object): Promise<string> => {
+    const provider = getProvider();
+    if (!provider || !publicKey) throw new Error("Wallet not connected");
+    setLoading(true);
+    try {
+      const result = await provider.signTransaction(JSON.stringify(txJson), publicKey);
+      if (result?.cancelled) throw new Error("Signing cancelled");
+      if (!result?.signatureHex) throw new Error("No signature returned");
+      return result.signatureHex;
+    } finally {
+      setLoading(false);
+    }
+  }, [publicKey]);
+
+  // Build approval, attach to tx, submit to Casper node, return deploy hash
+  const signAndSubmit = useCallback(async (txJson: object): Promise<string> => {
+    const sigHex = await signTransaction(txJson);
+    // ED25519 signatures are prefixed with "01" in Casper's approval format
+    const approval = { signer: publicKey!, signature: "01" + sigHex };
+    const signedTx = { ...(txJson as Record<string, unknown>), approvals: [approval] };
+    const res = await fetch("https://node.testnet.casper.network/rpc", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0", id: 1,
+        method: "account_put_transaction",
+        params: { transaction: { Version1: signedTx } },
+      }),
+    });
+    const data = await res.json() as {
+      result?: { transaction_hash?: { Version1?: string } };
+      error?: { code?: number; message?: string };
+    };
+    if (data.error) throw new Error(`Code: ${data.error.code}, err: ${data.error.message}`);
+    const hash = data.result?.transaction_hash?.Version1;
+    if (!hash) throw new Error("No transaction hash returned");
+    return hash;
+  }, [publicKey, signTransaction]);
+
   const shortKey = publicKey
     ? `${publicKey.slice(0, 8)}…${publicKey.slice(-6)}`
     : null;
@@ -125,6 +167,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       connect,
       disconnect,
       signMessage,
+      signTransaction,
+      signAndSubmit,
     }}>
       {children}
     </WalletContext.Provider>

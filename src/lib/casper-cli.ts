@@ -128,6 +128,51 @@ export async function putTransaction(callArgs: ContractCallArgs): Promise<string
   return hash;
 }
 
+// ── Build unsigned tx for wallet signing (user pays) ─────────────────────────
+
+export async function buildUnsignedTx(callArgs: {
+  initiatorPublicKey: string;
+  contractHash: string;
+  entryPoint: string;
+  args: Args;
+  paymentMotes?: bigint;
+}): Promise<Record<string, unknown>> {
+  const { initiatorPublicKey, contractHash, entryPoint, args, paymentMotes = 5_000_000_000n } = callArgs;
+
+  const publicKey = PublicKey.fromHex(initiatorPublicKey);
+  const initiatorAddr = new InitiatorAddr(publicKey);
+
+  const invTarget = new TransactionInvocationTarget();
+  invTarget.byHash = Hash.fromHex(contractHash);
+  const storedTarget = new StoredTarget();
+  storedTarget.id = invTarget;
+  storedTarget.runtime = TransactionRuntime.vmCasperV1();
+  const target = new TransactionTarget();
+  target.stored = storedTarget;
+
+  const pricing = new PricingMode();
+  const limited = new PaymentLimitedMode();
+  limited.paymentAmount = Number(paymentMotes);
+  limited.gasPriceTolerance = 3;
+  limited.standardPayment = true;
+  pricing.paymentLimited = limited;
+
+  const payload = TransactionV1Payload.build({
+    initiatorAddr,
+    args,
+    ttl: TTL,
+    entryPoint: TransactionEntryPoint.fromJSON({ Custom: entryPoint }),
+    pricingMode: pricing,
+    timestamp: new Timestamp(new Date()),
+    transactionTarget: target,
+    scheduling: TransactionScheduling.fromJSON("Standard"),
+    chainName: CHAIN,
+  });
+
+  const tx = TransactionV1.makeTransactionV1(payload);
+  return (TransactionV1.toJSON(tx) ?? {}) as Record<string, unknown>;
+}
+
 // ── Convenience wrappers ──────────────────────────────────────────────────────
 
 export async function submitSetKyc(
