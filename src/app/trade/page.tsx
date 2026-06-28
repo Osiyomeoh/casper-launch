@@ -90,34 +90,26 @@ export default function TradePage() {
       // Keep CSPR ≤ 10,000 for testnet seeding constraints.
       const totalCspr = Math.min(priceUsd / csprPrice, 10_000);
       const csprMotes = BigInt(Math.ceil(totalCspr * 1_000_000_000)).toString();
-      // Step 1: Build unsigned tx on server (user is initiator — user pays gas)
-      step("list", "pending", "Building transaction…");
-      const buildRes = await fetch("/api/casper/build-tx", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "escrow_list", initiatorPublicKey: wallet.publicKey, bps, price_cspr: csprMotes }),
-      }).then(r => r.json()) as { txJson?: object; error?: string };
-      if (buildRes.error || !buildRes.txJson) throw new Error(buildRes.error ?? "Failed to build transaction");
+      // Step 1: User signs authorization message — wallet popup confirms intent
+      step("list", "pending", "Confirm listing in wallet popup…");
+      const authMsg = `CasperLaunch sell authorization\nAsset: ${selected.metadata.asset_name ?? selected.tokenId}\nYield: ${bps / 100}% (${bps} bps)\nPrice: ${csprMotes} motes\nSeller: ${(wallet.publicKey ?? "").slice(0, 20)}…`;
+      await wallet.signMessage(authMsg);
 
-      // Step 2: User signs and submits directly to Casper node
-      step("list", "pending", "Sign in your wallet — you pay gas…");
-      const txHash = await wallet.signAndSubmit(buildRes.txJson);
-
-      // Step 3: Record listing in DB
-      step("list", "pending", "Recording listing…");
-      const res = await fetch("/api/casper/escrow-list", {
+      // Step 2: Agent submits the escrow listing on-chain
+      step("list", "pending", "Submitting listing to escrow contract…");
+      const res = await fetch("/api/casper/escrow-list-agent", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           token_id: selected.tokenId,
           asset_name: selected.metadata.asset_name ?? selected.tokenId,
           bps, price_cspr: csprMotes, price_usd: priceUsd,
-          seller_wallet: wallet.publicKey, tx_hash: txHash,
+          seller_wallet: wallet.publicKey,
         }),
       });
       const data = await res.json() as { listing_id?: string; tx_hash?: string; error?: string };
       if (!res.ok) throw new Error(data.error ?? "Failed");
-      step("list", "done", `Listing tx: ${txHash.slice(0, 12)}…`);
+      step("list", "done", `Listing tx: ${data.tx_hash?.slice(0, 12)}…`);
 
       // Step 3: Mirror in SQLite for orders UI (escrow-list already does this, skip duplicate)
       const updated2 = await fetch("/api/orders?listings=1").then(r => r.json()) as Listing[];

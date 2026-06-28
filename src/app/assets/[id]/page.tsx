@@ -45,27 +45,23 @@ function ListForSalePanel({ tok, wallet }: { tok: TokenData; wallet: ReturnType<
     setListLoading(true);
     setListResult(null);
     try {
-      // 1. Build unsigned tx on server (user is initiator)
-      const buildRes = await fetch("/api/casper/build-tx", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "escrow_list", initiatorPublicKey: wallet.publicKey, bps: bpsNum, price_cspr: priceCspr }),
-      }).then(r => r.json()) as { txJson?: object; error?: string };
-      if (buildRes.error || !buildRes.txJson) throw new Error(buildRes.error ?? "Failed to build transaction");
+      // 1. User signs authorization message (wallet popup)
+      const authMsg = `CasperLaunch sell authorization\nAsset: ${tok.metadata?.asset_name ?? tok.tokenId}\nYield: ${bpsNum / 100}%\nPrice: ${priceCspr} motes`;
+      await wallet.signMessage(authMsg);
 
-      // 2. User signs and submits directly to Casper node
-      const txHash = await wallet.signAndSubmit(buildRes.txJson);
-
-      // 3. Record in DB
-      await fetch("/api/casper/escrow-list", {
+      // 2. Agent submits the escrow listing on-chain
+      const res = await fetch("/api/casper/escrow-list-agent", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           token_id: tok.tokenId, bps: bpsNum, price_cspr: priceCspr,
           price_usd: priceUsd, seller_wallet: wallet.publicKey,
-          asset_name: tok.metadata?.asset_name ?? tok.tokenId, tx_hash: txHash,
+          asset_name: tok.metadata?.asset_name ?? tok.tokenId,
         }),
       });
+      const data = await res.json() as { listing_id?: string; tx_hash?: string; error?: string };
+      if (!res.ok) throw new Error(data.error ?? "Failed");
+      const txHash = data.tx_hash ?? "";
 
       setListResult({ ok: true, msg: `Listed on-chain ✓ — tx: ${txHash.slice(0, 16)}…` });
       setListBps(""); setListPrice("");
@@ -107,10 +103,10 @@ function ListForSalePanel({ tok, wallet }: { tok: TokenData; wallet: ReturnType<
       >
         {listLoading
           ? <><span className="animate-spin material-symbols-outlined text-[16px]">autorenew</span> Waiting for wallet signature…</>
-          : <><span className="material-symbols-outlined text-[16px]">storefront</span> Sign &amp; List on Escrow Contract →</>}
+          : <><span className="material-symbols-outlined text-[16px]">storefront</span> Authorize &amp; List on Escrow Contract →</>}
       </button>
       <p className="text-[10px] text-[#abb9d6]">
-        Your CasperWallet will prompt you to sign and pay gas. Agent is not involved.
+        Your wallet signs an authorization message, then the AI agent submits the on-chain listing.
       </p>
     </div>
   );
