@@ -140,25 +140,34 @@ export default function ChatPage() {
           throw new Error("Connect your CasperWallet to pay for AI tokenization (3 CSPR)");
         }
 
-        // 1. Build unsigned 3 CSPR transfer Deploy to platform treasury
+        // 1. User signs a payment authorization message with CasperWallet
+        //    (CasperWallet can't sign TransactionV1 and Casper 2.0 rejects
+        //    CLPublicKey transfer targets in legacy Deploys, so we use
+        //    signMessage for wallet proof + agent submits the on-chain transfer)
+        addMessage("agent", "Sign the payment authorization in your CasperWallet...");
+        const authMessage = `x402:ai-tokenize:${Date.now()}:from:${wallet.publicKey}`;
+        const authSig = await wallet.signMessage(authMessage);
+
+        // 2. Server verifies the signature and submits the on-chain transfer
+        addMessage("agent", "Submitting payment on-chain...");
         const payRes = await fetch("/api/casper/make-x402-payment", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ senderPublicKey: wallet.publicKey }),
+          body: JSON.stringify({
+            senderPublicKey: wallet.publicKey,
+            authMessage,
+            authSignature: authSig,
+          }),
         });
-        const payData = await payRes.json() as { deployJson?: Record<string, unknown>; error?: string };
-        if (!payRes.ok || !payData.deployJson) throw new Error(payData.error ?? "Failed to build payment deploy");
+        const payData = await payRes.json() as { txHash?: string; error?: string };
+        if (!payRes.ok || !payData.txHash) throw new Error(payData.error ?? "Payment failed");
 
-        // 2. User signs + submits the transfer in CasperWallet — wallet popup appears
-        addMessage("agent", "Approve the 3 CSPR payment in your CasperWallet...");
-        const deployHash = await wallet.signAndSubmitDeploy(payData.deployJson);
+        addMessage("agent", `Payment confirmed (${payData.txHash.slice(0, 12)}…). Extracting metadata...`);
 
-        addMessage("agent", `Payment confirmed (${deployHash.slice(0, 12)}…). Extracting metadata...`);
-
-        // 3. Build X-PAYMENT header with the real on-chain deploy hash
+        // 3. Build X-PAYMENT header with the real on-chain tx hash
         const paymentHeader = Buffer.from(JSON.stringify({
           x402Version: 1, scheme: "casper-exact", network: "casper-test",
-          payload: { deployHash, from: wallet.publicKey },
+          payload: { deployHash: payData.txHash, from: wallet.publicKey },
         })).toString("base64");
 
         const res = await fetch("/api/ai/tokenize", {
