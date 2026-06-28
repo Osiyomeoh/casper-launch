@@ -75,12 +75,24 @@ type CasperRpcResponse = {
   error?: { message: string };
 };
 
+async function sleep(ms: number) { return new Promise(r => setTimeout(r, ms)); }
+
 export async function verifyPayment(payment: X402Payment): Promise<{ valid: boolean; reason?: string }> {
   const { deployHash } = payment.payload;
   if (!/^[0-9a-f]{64}$/i.test(deployHash)) {
     return { valid: false, reason: "Invalid deploy hash format" };
   }
 
+  // Retry up to 10× with 3s delay — tx needs ~1 block (~4-8s) to be indexed
+  for (let attempt = 0; attempt < 10; attempt++) {
+    if (attempt > 0) await sleep(3000);
+    const result = await checkTransaction(deployHash);
+    if (result !== null) return result;
+  }
+  return { valid: false, reason: "Transaction not yet finalized after 30s — please retry" };
+}
+
+async function checkTransaction(deployHash: string): Promise<{ valid: boolean; reason?: string } | null> {
   try {
     // Try Casper 2.0 transaction lookup first
     const txRes = await fetch(CASPER_TESTNET_RPC, {
@@ -97,13 +109,17 @@ export async function verifyPayment(payment: X402Payment): Promise<{ valid: bool
     if (txRes.ok) {
       const txData = (await txRes.json()) as CasperRpcResponse;
       if (txData.error) {
-        return { valid: false, reason: `Transaction not found: ${txData.error.message}` };
+        // -32014 = no such transaction — not indexed yet, retry
+        return null;
       }
       const execResult = txData.result?.transaction?.execution_info?.execution_result?.V2;
+      if (!txData.result?.transaction?.execution_info) {
+        // Tx exists but not yet executed — retry
+        return null;
+      }
       if (execResult?.error_message) {
         return { valid: false, reason: `Transaction failed: ${execResult.error_message}` };
       }
-      // Transaction exists and executed without error — accept it
       return { valid: true };
     }
 
@@ -120,17 +136,11 @@ export async function verifyPayment(payment: X402Payment): Promise<{ valid: bool
     });
 
     const deployData = (await deployRes.json()) as CasperRpcResponse;
-    if (deployData.error) {
-      return { valid: false, reason: "Deploy not found on testnet" };
-    }
+    if (deployData.error) return null; // not indexed yet — retry
     const execResults = deployData.result?.execution_results ?? [];
-    if (execResults.length === 0) {
-      return { valid: false, reason: "Deploy not yet executed" };
-    }
+    if (execResults.length === 0) return null; // pending — retry
     const success = execResults.some((r) => r.result?.Success !== undefined);
-    if (!success) {
-      return { valid: false, reason: "Deploy execution failed" };
-    }
+    if (!success) return { valid: false, reason: "Deploy execution failed" };
     return { valid: true };
   } catch (e) {
     return { valid: false, reason: `RPC error: ${e instanceof Error ? e.message : String(e)}` };
