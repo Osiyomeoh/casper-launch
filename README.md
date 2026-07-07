@@ -1,186 +1,154 @@
-# CasperLaunch — AI-Powered RWA Tokenization Platform
+# CasperLaunch
 
-> Tokenize real-world assets in minutes. No blockchain knowledge required.
-
-Built for the **Casper Agentic Buildathon 2026** — Casper Innovation Track.
+> AI-powered real-world asset tokenization on the Casper blockchain.
 
 **Live:** [casper-launch.vercel.app](https://casper-launch.vercel.app)
+**Built for:** Casper Agentic Buildathon 2026
 
 ---
 
 ## What It Does
 
-CasperLaunch lets anyone tokenize a real-world asset — property, farmland, commercial building — as a CEP-78 NFT on the Casper blockchain. An AI agent extracts metadata, manages KYC whitelisting, mints on-chain tokens, and autonomously distributes yield. Users connect via CasperWallet browser extension.
+CasperLaunch converts physical assets (property, farmland, commercial buildings) into CEP-78 NFTs on the Casper blockchain. An AI agent extracts metadata from plain language, manages on-chain KYC, mints tokens, distributes yield autonomously, and settles secondary trades, all without human intervention.
+
+Every flow is live on Casper testnet. Nothing is mocked.
 
 ---
 
 ## Agentic AI Features
 
-### 1. AI Asset Tokenization (x402-gated)
-Describe your asset in plain English. The AI extracts structured CEP-78 metadata and guides you through the full minting flow. Access costs **3 CSPR**, paid on-chain before the AI runs.
-
-```
-1. User describes asset in chat
-2. Server returns HTTP 402 + payment requirement (payTo, amount: 3 CSPR)
-3. Platform builds unsigned CSPR transfer Deploy
-4. CasperWallet popup — user approves and signs (Deploy format, Casper 1.x)
-5. Deploy submitted on-chain → deploy hash returned
-6. Client sends deploy hash as X-PAYMENT header to /api/ai/tokenize
-7. Server verifies deploy on testnet RPC (info_get_transaction)
-8. Gemini AI runs → metadata extracted → CEP-78 token minted
-```
-
-**Platform fee:** 0.5% of asset valuation displayed at mint time.
+### 1. AI Tokenization Agent (x402-gated)
+Describe your asset in plain English. The AI (Gemini 2.0 Flash via Groq) extracts structured CEP-78 metadata and orchestrates the full minting flow. Access costs **3 CSPR paid on-chain** via the x402 micropayment protocol, the first non-EVM x402 implementation.
 
 ### 2. Autonomous Yield Distribution Agent
-A server-side agent polls the yield distributor contract. When the pool balance exceeds the threshold, it autonomously signs and submits a `distribute()` transaction — no human approval needed.
+Polls the yield distributor contract continuously. When pool balance exceeds the threshold, it autonomously signs and submits a `distribute()` transaction, splitting yield proportionally to all registered holders. No human trigger required.
 
-- Dashboard at `/agent` shows real-time agent status and transaction history
-- All distributions logged with on-chain transaction hashes
-
-### 3. On-Chain Governance
-Token holders vote on proposals — parameter changes, asset whitelisting, treasury decisions. Every vote is a real on-chain transaction.
-
-### 4. Compliance-Enforced Marketplace
-Fractional yield shares can be listed for sale on the escrow contract. Transfer restrictions are enforced on-chain — only KYC-verified wallets can receive shares.
-
----
-
-## Revenue Model
-
-| Stream | Rate | Status |
-|--------|------|--------|
-| AI access fee (x402) | 3 CSPR per tokenization request | **Live — on-chain payment required** |
-| Tokenization fee | 0.5% of asset valuation | Displayed at mint |
-| Secondary market spread | 0.25% per trade | Planned |
-| Yield distribution fee | 5% of distributed yield | In contract formula |
-| Compliance-as-a-Service | $99/mo per issuer | Planned |
+### 3. AI-Assisted Trade Settlement
+Buyer authorizes via `signMessage`. The agent verifies ownership, submits the CSPR transfer on-chain, and calls `register_holder` on the yield contract, transferring yield rights instantly.
 
 ---
 
 ## Smart Contracts (Casper Testnet)
 
-All contracts are deployed and live on Casper testnet:
+| Contract | Package Hash |
+|---|---|
+| RWA NFT (CEP-78) | `53eb1c21627a3baad41e5419a4e8f7a5f17eaf25090125018d2bf9aa57150f66` |
+| Yield Distributor | `3df77115ff3fb4504add44719344b9d969378223a2bd9207bb3e57d3f51468f3` |
+| Governance | `7856b4dd9c97e4a7a0701465efee1864772f7767167ca0f174535b3e9a90d0a3` |
+| Trade Escrow | `32e552364dad24a9939aaaff3bd40745b5ad75631c136b2031a657af4fc214bb` |
 
-| Contract | Hash | Explorer |
-|----------|------|---------|
-| RWA NFT (CEP-78) | `53eb1c21627a3baad41e5419a4e8f7a5f17eaf25090125018d2bf9aa57150f66` | [View](https://testnet.cspr.live/contract/53eb1c21627a3baad41e5419a4e8f7a5f17eaf25090125018d2bf9aa57150f66) |
-| Yield Distributor | `3df77115ff3fb4504add44719344b9d969378223a2bd9207bb3e57d3f51468f3` | [View](https://testnet.cspr.live/contract/3df77115ff3fb4504add44719344b9d969378223a2bd9207bb3e57d3f51468f3) |
-| Governance | `7856b4dd9c97e4a7a0701465efee1864772f7767167ca0f174535b3e9a90d0a3` | [View](https://testnet.cspr.live/contract/7856b4dd9c97e4a7a0701465efee1864772f7767167ca0f174535b3e9a90d0a3) |
-| Trade Escrow | `32e552364dad24a9939aaaff3bd40745b5ad75631c136b2031a657af4fc214bb` | [View](https://testnet.cspr.live/contract/32e552364dad24a9939aaaff3bd40745b5ad75631c136b2031a657af4fc214bb) |
-
-Written in Rust, compiled to WASM, deployed to Casper testnet.
+All contracts are written in Rust, compiled to WebAssembly, and deployed on Casper testnet.
 
 ---
 
-## Tech Stack
+## How to Test
 
-- **Frontend:** Next.js 15 (App Router), Tailwind CSS
-- **Blockchain:** Casper Network (testnet), casper-js-sdk v5
-- **Smart Contracts:** Rust + casper-contract, casper-types
-- **AI:** Google Gemini 2.0 Flash (metadata extraction + chat)
-- **Wallet:** CasperWallet browser extension
-- **Storage:** Neon Postgres (serverless-compatible, via `@neondatabase/serverless`)
-- **Files:** Pinata IPFS (document anchoring)
+### Prerequisites
+- [CasperWallet](https://casperwallet.io) browser extension installed
+- Casper testnet CSPR from the [faucet](https://testnet.cspr.live/tools/faucet)
+
+### Step-by-Step
+
+**1. Connect wallet**
+Visit [casper-launch.vercel.app](https://casper-launch.vercel.app) and click **Connect Wallet**. Approve in CasperWallet.
+
+**2. Tokenize an asset**
+- Go to `/chat`
+- Describe an asset: e.g. "A 3-bedroom apartment in Lekki Lagos worth $180,000 with 8.5% rental yield"
+- Sign the authorization popup in CasperWallet (x402 payment: 3 CSPR on-chain)
+- The AI extracts metadata, mints a CEP-78 token, registers you as holder
+- You receive a Casper testnet transaction hash
+
+**3. List a fractional stake**
+- Go to `/trade`, click **List Asset**
+- Enter basis points (e.g. 1000 = 10%) and price in CSPR
+- Sign authorization in CasperWallet
+
+**4. Buy a listed stake**
+- Go to `/trade`, find an active listing, click **Buy**
+- Sign in CasperWallet
+- Agent submits CSPR transfer and registers you as yield holder on-chain
+
+**5. View yield distribution**
+- Go to `/yield` to see pool balance and distribution history
+- Go to `/agent` to watch the autonomous agent activity log
+
+**6. Governance**
+- Go to `/governance`, create a proposal, vote, and view quorum status
 
 ---
 
 ## Architecture
 
 ```
-User (CasperWallet Extension)
-        │
-        ▼
-   Next.js App (Vercel)
-        │
-   ┌────┼────────────────────┐
-   │    │                    │
-/chat  /api/casper/*    /api/agent/*
-AI +   RPC proxy +      Autonomous
-Mint   Settlement       Yield Agent
-   │    │                    │
-   └────┼────────────────────┘
-        │
-   Neon Postgres          IPFS (Pinata)
-   (off-chain mirror)     (document storage)
-        │
-   Casper Testnet
-        │
-   ┌────┼──────────┬──────────┐
-   │    │          │          │
-rwa-nft  yield-dist  govern.  escrow
-(CEP-78) contract   contract  contract
-```
-
-### Agent-Pays Settlement Pattern
-
-CasperWallet currently supports signing Deploy (Casper 1.x) format only. Our contracts use TransactionV1 (Casper 2.0). The solution:
-
-- **User authorizes** by signing a message via CasperWallet (`signMessage`)
-- **Agent submits** the actual on-chain transaction (agent keypair pays gas)
-
-This is a testnet workaround. Once CasperWallet ships `signTransaction` support for TransactionV1, users will sign and pay directly — the agent is removed from the payment leg entirely.
-
----
-
-## Tokenization Flow
-
-```
-1. Describe asset in chat
-2. CasperWallet popup — sign 3 CSPR transfer to platform treasury (x402 payment)
-3. Deploy hash returned → sent as X-PAYMENT header to AI endpoint
-4. Server verifies payment on-chain → Gemini AI extracts CEP-78 metadata
-5. Upload backing document → SHA-256 hash anchored on IPFS
-6. Sign authorization message via CasperWallet (proves wallet ownership)
-7. Agent KYC-whitelists wallet on the RWA NFT contract
-8. Agent mints CEP-78 token with metadata + IPFS CID
-9. Agent registers issuer as 100% yield holder
-10. Platform fee (0.5% of valuation) displayed
-11. Token appears in portfolio — ready to offer shares to investors
+User (CasperWallet)
+        |
+        v
+Next.js App (Vercel)
+  /chat   /trade   /yield   /governance   /agent
+        |
+        +-- Gemini AI (Groq inference)
+        +-- x402 Payment Gate
+        +-- Agent (server-side keypair, ED25519)
+        |
+        v
+Casper Testnet
+  CEP-78 NFT  |  Yield Distributor  |  Governance  |  Escrow
+        |
+        v
+Neon Postgres (off-chain state mirror)
 ```
 
 ---
 
-## Local Setup
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Blockchain | Casper Network (Testnet) |
+| Smart Contracts | Rust / WebAssembly |
+| NFT Standard | CEP-78 |
+| AI Model | Google Gemini 2.0 Flash (Groq) |
+| Payment Protocol | x402 (Casper-native, first non-EVM) |
+| Frontend | Next.js 15, TypeScript, Tailwind CSS |
+| Deployment | Vercel |
+| Database | Neon Postgres |
+| Wallet | CasperWallet |
+| Casper SDK | casper-js-sdk (TypeScript) |
+
+---
+
+## Local Development
 
 ```bash
-# Install dependencies
+git clone https://github.com/Osiyomeoh/casper-launch
+cd casper-launch
 npm install
-
-# Set environment variables
 cp .env.example .env.local
-# Required: GEMINI_API_KEY, GROQ_API_KEY, PINATA_JWT, DATABASE_URL,
-#           AGENT_SECRET_KEY_PEM, NEXT_PUBLIC_RWA_NFT_HASH,
-#           NEXT_PUBLIC_YIELD_HASH, NEXT_PUBLIC_GOVERNANCE_HASH,
-#           NEXT_PUBLIC_ESCROW_HASH
-
-# Run dev server
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
+### Required Environment Variables
+
+```
+AGENT_SECRET_KEY_PEM=         # ED25519 private key for agent transactions
+NEXT_PUBLIC_AGENT_PUBLIC_KEY= # Corresponding public key (hex)
+NEXT_PUBLIC_NFT_HASH=         # CEP-78 contract hash
+NEXT_PUBLIC_YIELD_HASH=       # Yield distributor contract hash
+NEXT_PUBLIC_ESCROW_HASH=      # Trade escrow contract hash
+NEXT_PUBLIC_GOV_HASH=         # Governance contract hash
+GROQ_API_KEY=                 # Groq API key (Gemini access)
+DATABASE_URL=                 # Neon Postgres connection string
+```
 
 ---
 
-## Pages
+## Security
 
-| Route | Description |
-|-------|-------------|
-| `/` | Landing page |
-| `/chat` | AI asset tokenization wizard |
-| `/assets` | All tokenized assets |
-| `/assets/[id]` | Asset detail, cap table, offer shares |
-| `/trade` | Secondary marketplace |
-| `/portfolio` | Wallet holdings and yield positions |
-| `/governance` | On-chain proposal voting |
-| `/agent` | Autonomous yield agent dashboard |
-| `/compliance` | KYC/AML audit trail |
-| `/settings` | Agent and notification preferences |
+See [SECURITY.md](SECURITY.md) for vulnerability reporting guidelines.
 
 ---
 
 ## License
 
-MIT — open source, built for the Casper ecosystem.
-
-*Contact: [GitHub](https://github.com/Osiyomeoh/casper-launch) | Built for Casper Agentic Buildathon 2026*
+MIT
