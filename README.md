@@ -3,6 +3,7 @@
 > AI-powered real-world asset tokenization on the Casper blockchain.
 
 **Live:** [casper-launch.vercel.app](https://casper-launch.vercel.app)
+**Demo:** [youtube.com/watch?v=0NtvhF9qrow](https://www.youtube.com/watch?v=0NtvhF9qrow)
 **Built for:** Casper Agentic Buildathon 2026
 
 ---
