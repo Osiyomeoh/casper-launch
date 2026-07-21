@@ -2,6 +2,9 @@
 import { useEffect, useState, useCallback } from "react";
 import AppLayout from "@/app/components/AppLayout";
 import type { AgentState } from "@/lib/agent-store";
+import type { CloudAccount, CloudTransfer, CloudBlock } from "@/lib/cspr-cloud";
+
+const AGENT_PUBLIC_KEY = process.env.NEXT_PUBLIC_AGENT_PUBLIC_KEY ?? "01e208d198c18d6bd1802c90ae44173393a18d16cbe70144ead27018d237888c2a";
 
 const LEVEL_COLOR: Record<string, string> = {
   info: "#abb9d6",
@@ -32,6 +35,9 @@ export default function AgentPage() {
   const [state, setState] = useState<AgentState | null>(null);
   const [countdown, setCountdown] = useState<string>("—");
   const [actionLoading, setActionLoading] = useState(false);
+  const [cloudAccount, setCloudAccount] = useState<CloudAccount | null>(null);
+  const [cloudTransfers, setCloudTransfers] = useState<CloudTransfer[]>([]);
+  const [networkBlock, setNetworkBlock] = useState<CloudBlock | null>(null);
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -40,9 +46,29 @@ export default function AgentPage() {
     } catch {}
   }, []);
 
+  const fetchCloudData = useCallback(async () => {
+    try {
+      const [accountRes, networkRes] = await Promise.all([
+        fetch(`/api/cspr-cloud/account?publicKey=${AGENT_PUBLIC_KEY}`),
+        fetch("/api/cspr-cloud/network"),
+      ]);
+      if (accountRes.ok) {
+        const d = await accountRes.json() as { account: CloudAccount; transfers: CloudTransfer[] };
+        setCloudAccount(d.account);
+        setCloudTransfers(d.transfers ?? []);
+      }
+      if (networkRes.ok) {
+        const d = await networkRes.json() as { block: CloudBlock };
+        setNetworkBlock(d.block);
+      }
+    } catch {}
+  }, []);
+
   useEffect(() => {
     fetchStatus();
+    fetchCloudData();
     const pollInterval = setInterval(fetchStatus, 5000);
+    const cloudInterval = setInterval(fetchCloudData, 30000);
     const cdInterval = setInterval(() => {
       setState((s) => {
         if (s?.nextCheck) setCountdown(fmtCountdown(s.nextCheck));
@@ -52,8 +78,9 @@ export default function AgentPage() {
     return () => {
       clearInterval(pollInterval);
       clearInterval(cdInterval);
+      clearInterval(cloudInterval);
     };
-  }, [fetchStatus]);
+  }, [fetchStatus, fetchCloudData]);
 
   async function handleToggle() {
     if (!state) return;
@@ -118,6 +145,69 @@ export default function AgentPage() {
           <div className="bg-[#091b39] border border-[rgba(100,255,218,0.12)] rounded-xl p-4">
             <div className="text-xs font-mono text-[#abb9d6] uppercase tracking-wider mb-1">Distributions</div>
             <div className="text-sm font-bold text-[#64FFDA]">{state?.totalDistributions ?? 0}</div>
+          </div>
+        </div>
+
+        {/* CSPR.cloud live data */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Agent wallet */}
+          <div className="bg-[#091b39] border border-[rgba(100,255,218,0.12)] rounded-xl p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <span className="material-symbols-outlined text-[#64FFDA] text-[18px]">account_balance_wallet</span>
+              <span className="text-sm font-bold text-[#d8e2ff]">Agent Wallet</span>
+              <span className="ml-auto text-[10px] font-mono text-[#abb9d6] bg-[#112240] px-2 py-0.5 rounded">via CSPR.cloud</span>
+            </div>
+            <div className="space-y-1.5">
+              <div className="flex justify-between text-xs">
+                <span className="text-[#abb9d6]">Balance</span>
+                <span className="text-[#64FFDA] font-mono font-bold">
+                  {cloudAccount ? `${(Number(cloudAccount.balance) / 1e9).toFixed(2)} CSPR` : "loading..."}
+                </span>
+              </div>
+              <div className="flex justify-between text-xs">
+                <span className="text-[#abb9d6]">Public key</span>
+                <span className="text-[#d8e2ff] font-mono">{AGENT_PUBLIC_KEY.slice(0, 12)}…</span>
+              </div>
+              <div className="flex justify-between text-xs">
+                <span className="text-[#abb9d6]">Network block</span>
+                <span className="text-[#d8e2ff] font-mono">
+                  {networkBlock ? `#${networkBlock.block_height.toLocaleString()}` : "—"}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Recent agent transfers */}
+          <div className="bg-[#091b39] border border-[rgba(100,255,218,0.12)] rounded-xl p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <span className="material-symbols-outlined text-[#64FFDA] text-[18px]">swap_horiz</span>
+              <span className="text-sm font-bold text-[#d8e2ff]">Recent Transfers</span>
+              <span className="ml-auto text-[10px] font-mono text-[#abb9d6] bg-[#112240] px-2 py-0.5 rounded">via CSPR.cloud</span>
+            </div>
+            {cloudTransfers.length === 0 ? (
+              <p className="text-xs text-[#abb9d6]">No recent transfers found</p>
+            ) : (
+              <div className="space-y-2">
+                {cloudTransfers.slice(0, 4).map((t) => (
+                  <div key={t.transfer_id} className="flex justify-between text-xs border-b border-[rgba(100,255,218,0.05)] pb-1.5 last:border-0">
+                    <div>
+                      <a
+                        href={`https://testnet.cspr.live/deploy/${t.deploy_hash}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[#64FFDA] font-mono hover:underline"
+                      >
+                        {t.deploy_hash.slice(0, 10)}…
+                      </a>
+                      <div className="text-[#abb9d6] mt-0.5">{new Date(t.timestamp).toLocaleString()}</div>
+                    </div>
+                    <span className="text-[#d8e2ff] font-mono font-bold">
+                      {(Number(t.amount) / 1e9).toFixed(2)} CSPR
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
