@@ -1,8 +1,12 @@
 import { NextResponse } from "next/server";
 import { buildPaymentRequirement, parsePaymentHeader, verifyPayment } from "@/lib/x402";
+import { runMcpTools, mcpGetCsprRate } from "@/lib/casper-mcp";
+
+const NFT_CONTRACT_HASH = process.env.NEXT_PUBLIC_NFT_HASH ?? "";
 
 const SYSTEM_PROMPT = `You are a real-world asset (RWA) tokenization specialist for CasperLaunch.
-Given a description of an asset, extract structured metadata for CEP-78 NFT minting on Casper blockchain.
+You have access to live Casper blockchain data fetched via the Casper MCP Server before this request ran.
+Use this on-chain context to enrich your metadata extraction where relevant.
 Respond ONLY with a valid JSON object — no markdown, no code fences, no explanation.
 
 JSON schema:
@@ -34,9 +38,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid X-PAYMENT header" }, { status: 400 });
   }
 
-  // Agent-submitted payments: the server submitted the tx itself so the hash
-  // is trusted — no need to wait for on-chain finalization.
-  // Legacy bypass token: skip verification for compatibility.
   const isAgentPaid = /^[0-9a-f]{64}$/i.test(payment.payload.deployHash);
   if (!isAgentPaid) {
     const verification = await verifyPayment(payment);
@@ -49,7 +50,10 @@ export async function POST(req: Request) {
   }
   // ── Payment verified ───────────────────────────────────────────────────────
 
-  const { description } = await req.json();
+  const { description, walletPublicKey } = await req.json() as {
+    description: string;
+    walletPublicKey?: string;
+  };
   if (!description?.trim()) {
     return NextResponse.json({ error: "description required" }, { status: 400 });
   }
@@ -58,6 +62,26 @@ export async function POST(req: Request) {
   if (!apiKey) {
     return NextResponse.json({ error: "GROQ_API_KEY not configured" }, { status: 503 });
   }
+
+  // ── MCP: fetch live on-chain context before AI runs ───────────────────────
+  const mcpPublicKey = walletPublicKey ?? payment.payload.from ?? "";
+  const [mcpToolCalls, csprRateRaw] = await Promise.all([
+    runMcpTools(mcpPublicKey, NFT_CONTRACT_HASH).catch(() => []),
+    mcpGetCsprRate("usd").catch(() => ""),
+  ]);
+
+  // Extract CSPR/USD rate for context
+  let csprUsd = "unknown";
+  try {
+    const rateMatch = csprRateRaw.match(/[\d.]+/);
+    if (rateMatch) csprUsd = rateMatch[0];
+  } catch {}
+
+  const mcpContext = mcpToolCalls.length > 0
+    ? `\n\nLive Casper blockchain context (fetched via Casper MCP Server):\n` +
+      mcpToolCalls.map(c => `[${c.tool}]: ${c.result.slice(0, 300)}`).join("\n") +
+      `\nCSPR/USD rate: ${csprUsd}`
+    : "";
 
   try {
     const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
@@ -69,7 +93,7 @@ export async function POST(req: Request) {
         max_tokens: 800,
         response_format: { type: "json_object" },
         messages: [
-          { role: "system", content: SYSTEM_PROMPT },
+          { role: "system", content: SYSTEM_PROMPT + mcpContext },
           { role: "user", content: `Extract CEP-78 metadata from this asset description:\n\n${description}` },
         ],
       }),
@@ -90,7 +114,7 @@ export async function POST(req: Request) {
     }
 
     return NextResponse.json(
-      { metadata },
+      { metadata, mcpToolCalls, csprUsd },
       { headers: { "X-PAYMENT-RESPONSE": payment.payload.deployHash } }
     );
   } catch (e) {

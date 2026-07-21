@@ -173,16 +173,19 @@ export default function ChatPage() {
         const res = await fetch("/api/ai/tokenize", {
           method: "POST",
           headers: { "Content-Type": "application/json", "X-PAYMENT": paymentHeader },
-          body: JSON.stringify({ description: text }),
+          body: JSON.stringify({ description: text, walletPublicKey: wallet.publicKey }),
         });
-        const data = await res.json() as { metadata?: AssetMetadata; error?: string };
+        const data = await res.json() as { metadata?: AssetMetadata; error?: string; mcpToolCalls?: { tool: string }[]; csprUsd?: string };
         if (data.error) throw new Error(data.error);
         const meta = data.metadata!;
         setMetadata(meta);
         setStep("review");
         saveDraft({ metadata: meta, step: "review" });
+        const mcpNote = data.mcpToolCalls?.length
+          ? `\n\n_Context fetched via Casper MCP: ${data.mcpToolCalls.map(c => c.tool).join(", ")}${data.csprUsd ? ` | 1 CSPR = $${data.csprUsd}` : ""}_`
+          : "";
         addMessage("agent",
-          `Here's the extracted CEP-78 metadata:\n\n• Name: ${meta.asset_name}\n• Type: ${meta.asset_type}\n• Location: ${meta.location}\n• Valuation: $${meta.valuation_usd.toLocaleString()}\n• Yield APY: ${meta.yield_apy}%\n• Total Tokens: ${meta.total_tokens.toLocaleString()}\n\nType "confirm" to proceed, or describe any corrections.`
+          `Here's the extracted CEP-78 metadata:\n\n• Name: ${meta.asset_name}\n• Type: ${meta.asset_type}\n• Location: ${meta.location}\n• Valuation: $${meta.valuation_usd.toLocaleString()}\n• Yield APY: ${meta.yield_apy}%\n• Total Tokens: ${meta.total_tokens.toLocaleString()}\n\nType "confirm" to proceed, or describe any corrections.${mcpNote}`
         );
       } catch (e) {
         const msg = e instanceof Error ? e.message : "Failed to extract metadata";

@@ -3,6 +3,7 @@ import { useEffect, useState, useCallback } from "react";
 import AppLayout from "@/app/components/AppLayout";
 import type { AgentState } from "@/lib/agent-store";
 import type { CloudAccount, CloudTransfer, CloudBlock } from "@/lib/cspr-cloud";
+import type { McpToolCall } from "@/lib/casper-mcp";
 
 const AGENT_PUBLIC_KEY = process.env.NEXT_PUBLIC_AGENT_PUBLIC_KEY ?? "01e208d198c18d6bd1802c90ae44173393a18d16cbe70144ead27018d237888c2a";
 
@@ -38,6 +39,8 @@ export default function AgentPage() {
   const [cloudAccount, setCloudAccount] = useState<CloudAccount | null>(null);
   const [cloudTransfers, setCloudTransfers] = useState<CloudTransfer[]>([]);
   const [networkBlock, setNetworkBlock] = useState<CloudBlock | null>(null);
+  const [mcpToolCalls, setMcpToolCalls] = useState<McpToolCall[]>([]);
+  const [csprUsd, setCsprUsd] = useState<string | null>(null);
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -64,11 +67,24 @@ export default function AgentPage() {
     } catch {}
   }, []);
 
+  const fetchMcpStatus = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/cspr-cloud/mcp-status?publicKey=${AGENT_PUBLIC_KEY}`);
+      if (res.ok) {
+        const d = await res.json() as { toolCalls: McpToolCall[]; csprUsd: string | null };
+        setMcpToolCalls(d.toolCalls ?? []);
+        setCsprUsd(d.csprUsd);
+      }
+    } catch {}
+  }, []);
+
   useEffect(() => {
     fetchStatus();
     fetchCloudData();
+    fetchMcpStatus();
     const pollInterval = setInterval(fetchStatus, 5000);
     const cloudInterval = setInterval(fetchCloudData, 30000);
+    const mcpInterval = setInterval(fetchMcpStatus, 60000);
     const cdInterval = setInterval(() => {
       setState((s) => {
         if (s?.nextCheck) setCountdown(fmtCountdown(s.nextCheck));
@@ -79,8 +95,9 @@ export default function AgentPage() {
       clearInterval(pollInterval);
       clearInterval(cdInterval);
       clearInterval(cloudInterval);
+      clearInterval(mcpInterval);
     };
-  }, [fetchStatus, fetchCloudData]);
+  }, [fetchStatus, fetchCloudData, fetchMcpStatus]);
 
   async function handleToggle() {
     if (!state) return;
@@ -209,6 +226,46 @@ export default function AgentPage() {
               </div>
             )}
           </div>
+        </div>
+
+        {/* MCP Tool Calls */}
+        <div className="bg-[#091b39] border border-[rgba(100,255,218,0.12)] rounded-xl overflow-hidden">
+          <div className="flex items-center gap-2 px-4 py-3 border-b border-[rgba(100,255,218,0.08)]">
+            <span className="material-symbols-outlined text-[#64FFDA] text-[18px]">psychology</span>
+            <span className="text-sm font-bold text-[#d8e2ff]">MCP Agent Tools</span>
+            <span className="ml-auto text-[10px] font-mono text-[#abb9d6] bg-[#112240] px-2 py-0.5 rounded">via Casper MCP Server</span>
+            {csprUsd && (
+              <span className="text-[10px] font-mono text-[#64FFDA] bg-[#0a2240] px-2 py-0.5 rounded">
+                1 CSPR = ${csprUsd}
+              </span>
+            )}
+          </div>
+          {mcpToolCalls.length === 0 ? (
+            <div className="px-4 py-6 text-center text-[#abb9d6] text-sm">
+              MCP tools loading... (runs every 60s)
+            </div>
+          ) : (
+            <div className="divide-y divide-[rgba(100,255,218,0.05)]">
+              {mcpToolCalls.map((call, i) => (
+                <div key={i} className="px-4 py-3 space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#64FFDA] shrink-0" />
+                    <span className="text-xs font-mono font-bold text-[#64FFDA]">{call.tool}</span>
+                    <span className="ml-auto text-[10px] font-mono text-[#abb9d6]">
+                      {new Date(call.timestamp).toLocaleTimeString("en-US", { hour12: false })}
+                    </span>
+                  </div>
+                  <div className="text-xs text-[#abb9d6] font-mono pl-3.5 line-clamp-2 leading-relaxed">
+                    {call.result.startsWith("Error:") ? (
+                      <span className="text-[#FF6B6B]">{call.result}</span>
+                    ) : (
+                      call.result.slice(0, 200)
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Controls */}
