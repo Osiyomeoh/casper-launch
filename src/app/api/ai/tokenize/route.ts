@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { buildPaymentRequirement, parsePaymentHeader, verifyPayment } from "@/lib/x402";
 import { runMcpTools, mcpGetCsprRate } from "@/lib/casper-mcp";
 
-const NFT_CONTRACT_HASH = process.env.NEXT_PUBLIC_NFT_HASH ?? "";
+const NFT_CONTRACT_HASH = process.env.NEXT_PUBLIC_RWA_NFT_HASH ?? "";
 
 const SYSTEM_PROMPT = `You are a real-world asset (RWA) tokenization specialist for CasperLaunch.
 You have access to live Casper blockchain data fetched via the Casper MCP Server before this request ran.
@@ -73,8 +73,8 @@ export async function POST(req: Request) {
   // Extract CSPR/USD rate for context
   let csprUsd = "unknown";
   try {
-    const rateMatch = csprRateRaw.match(/[\d.]+/);
-    if (rateMatch) csprUsd = rateMatch[0];
+    const rateMatch = csprRateRaw.match(/\$?(0\.\d+|\d+\.\d+)/);
+    if (rateMatch) csprUsd = rateMatch[1];
   } catch {}
 
   const mcpContext = mcpToolCalls.length > 0
