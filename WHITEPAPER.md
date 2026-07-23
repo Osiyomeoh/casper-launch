@@ -1,7 +1,7 @@
 # CasperLaunch Whitepaper
 ## Democratizing Real-World Asset Ownership Through Blockchain Tokenization
 
-**Version 2.0 | June 2026**
+**Version 2.1 | July 2026**
 **Network: Casper Blockchain (Testnet)**
 
 ---
@@ -15,7 +15,7 @@
 5. [Business Model & Revenue](#5-business-model--revenue)
 6. [Platform Architecture](#6-platform-architecture)
 7. [Smart Contracts](#7-smart-contracts)
-8. [AI Agent Layer](#8-ai-agent-layer)
+8. [AI Agent Layer](#8-ai-agent-layer) (Tokenization Agent, Yield Agent, Compliance Agent, MCP integration)
 9. [Tokenization Process](#9-tokenization-process)
 10. [Marketplace & Trading](#10-marketplace--trading)
 11. [Yield Distribution](#11-yield-distribution)
@@ -32,7 +32,7 @@
 
 CasperLaunch is a blockchain-based platform for the tokenization, trading, and yield distribution of real-world assets, built on the Casper Network. It enables fractional ownership of physical assets including real estate, commodities, treasury instruments, and invoices, making them accessible to any investor globally.
 
-The platform combines a Gemini AI agent for natural-language metadata extraction, a CEP-78 NFT standard for on-chain asset representation, an autonomous yield distribution agent, and a compliance-enforced secondary marketplace. All components are deployed on the Casper blockchain with Neon Postgres for off-chain state mirroring.
+The platform combines a Groq-powered AI agent for natural-language metadata extraction, a CEP-78 NFT standard for on-chain asset representation, two autonomous agents (yield distribution and KYC compliance enforcement), Casper MCP Server integration for live blockchain context, and a compliance-enforced secondary marketplace. All components are deployed on the Casper blockchain with Neon Postgres for off-chain state mirroring.
 
 This whitepaper describes the current working system as deployed on Casper testnet, the business model and revenue streams, the documented production upgrade paths for each testnet simplification, and the legal and operational framework required for mainnet deployment.
 
@@ -179,9 +179,10 @@ x402 fees are denominated in CSPR and collected on-chain at inference time. Toke
 │   /chat          /trade         /yield        /governance        │
 │   AI Tokenize    Marketplace    Yield Mgmt    Proposals          │
 │                                                                   │
-│   /api/ai/*           /api/agent/*    /api/casper/*              │
-│   Gemini AI           Autonomous      RPC Proxy +               │
-│   Extraction          Yield Agent     Settlement                 │
+│   /api/ai/*           /api/agent/*         /api/casper/*          │
+│   Groq AI             Yield Agent          RPC Proxy +           │
+│   Extraction          Compliance Agent     Settlement             │
+│   (MCP-enhanced)      (autonomous)                               │
 │                                                                   │
 │              Neon Postgres (serverless)                          │
 │         Off-chain state mirror + audit log                       │
@@ -278,9 +279,11 @@ platform_fee   = pool_balance × 0.05
 
 ## 8. AI Agent Layer
 
-### 8.1 Asset Tokenization Agent (x402-gated)
+CasperLaunch runs three autonomous agents in parallel, each with a distinct on-chain authority scope.
 
-Powered by Google Gemini 2.0 Flash (via Groq inference). When a user describes an asset in natural language via the `/chat` interface:
+### 8.1 Asset Tokenization Agent (x402-gated, MCP-enhanced)
+
+Powered by Llama 3.3 70B (via Groq). When a user describes an asset in natural language via the `/chat` interface:
 
 **Payment gate (x402, live on testnet):**
 1. `/api/ai/tokenize` returns HTTP 402 with Casper payment requirement
@@ -290,22 +293,47 @@ Powered by Google Gemini 2.0 Flash (via Groq inference). When a user describes a
 5. Client sends `X-PAYMENT: base64({ txHash, from: publicKey })` header
 6. Server verifies via `info_get_transaction` on testnet RPC
 
-**AI processing (after payment verified):**
-7. Gemini extracts structured metadata (name, type, valuation, IPFS CID)
+**MCP context fetching (before AI runs):**
+
+Before the AI model processes the user's asset description, the server calls the **Casper MCP Server** (`mcp.cspr.cloud`) via the Model Context Protocol. Four tools run in parallel:
+
+- `get_network_status`: current era, active validators, total stake
+- `get_latest_blocks`: live block hashes and timestamps
+- `get_validators`: top validators with network share
+- `get_current_currency_rate`: live CSPR/USD rate
+
+The results are injected into the AI system prompt as live blockchain context. This makes the AI genuinely agentic: it reasons about the current state of the Casper network, not a static snapshot.
+
+**AI processing (after payment verified and MCP context loaded):**
+7. Groq extracts structured metadata (name, type, valuation, IPFS CID) with on-chain context
 8. Validates against CEP-78 schema
 9. Orchestrates: KYC-whitelist, mint, register holder (all agent-signed TransactionV1)
 
 The x402 gate is not a simulation. Every AI request requires a real on-chain CSPR payment. This is the first production x402 implementation on a non-EVM chain.
 
-The agent runs server-side. All contract calls are signed with `AGENT_SECRET_KEY_PEM`. Gas costs are paid by the agent and recovered from the tokenization fee in production.
-
 ### 8.2 Autonomous Yield Distribution Agent
 
-Polls the yield distributor contract periodically. When the pool balance crosses the threshold, it autonomously constructs, signs, and submits a `distribute()` transaction.
+Polls the yield distributor contract every 30 seconds. When the pool balance crosses 1 CSPR threshold, it autonomously constructs, signs, and submits a `distribute()` TransactionV1.
 
-- Agent status visible at `/agent` with live transaction log
+- Agent status visible at `/agent` with live transaction log and CSPR.cloud data panels
 - All distributions produce an on-chain transaction hash, fully auditable
 - Agent authority is limited by the contract: it can only call `distribute()`, not modify parameters or the registry
+
+### 8.3 Autonomous Compliance Agent
+
+A second autonomous agent monitors KYC status for all registered token holders, running every 60 seconds.
+
+**Scan logic:**
+1. Query all tokens and holders from the Postgres mirror
+2. For each holder, check `kyc_attested_at` timestamp in token metadata
+3. If attestation is missing: flag wallet as `kyc_missing`
+4. If attestation is older than 90 days: flag as `kyc_expired` and initiate revocation
+5. Agent autonomously calls `set_kyc(account, approved=false)` on the CEP-78 contract
+6. Revocation transaction hash logged and displayed in the compliance dashboard
+
+The compliance agent enforces continuous AML/KYC compliance without human intervention. Flagged wallets cannot transfer tokens until re-attested. This represents the first autonomous on-chain KYC revocation system on the Casper Network.
+
+**Agent authority scope:** The compliance agent can only call `set_kyc()`. It cannot mint, transfer tokens, or touch the yield distributor. Each agent is scoped to its contract entry points.
 
 ---
 
@@ -532,13 +560,16 @@ Before mainnet deployment:
 
 ## 16. Roadmap
 
-### Phase 1: Testnet (Current, June 2026)
+### Phase 1: Testnet (Current, July 2026)
 - CEP-78 RWA NFT contract deployed and operational
-- Yield distributor with autonomous agent
+- Autonomous Yield Distribution Agent: polls every 30s, submits `distribute()` on-chain
+- Autonomous Compliance Agent: scans KYC expiry every 60s, auto-revokes via `set_kyc(false)`
 - Governance contract with on-chain voting
 - x402 payment gate live: real 3 CSPR on-chain payment required before AI runs
 - First Casper-native x402 implementation (non-EVM chain)
-- AI tokenization via Gemini 2.0 Flash (Groq inference)
+- Casper MCP Server integration: live network context injected into AI prompts before inference
+- CSPR.cloud API integration: live balance, transfers, block data on agent dashboard
+- AI tokenization via Llama 3.3 70B (Groq inference)
 - CasperWallet integration (signMessage authorization + agent-submitted TransactionV1)
 - Secondary marketplace with on-chain escrow listings and yield rights transfer
 - Neon Postgres off-chain state mirror with chain sync
@@ -574,7 +605,7 @@ Before mainnet deployment:
 
 ## 17. Conclusion
 
-CasperLaunch demonstrates that real-world asset tokenization is deployable today on the Casper Network. Every critical flow including minting, trading, yield distribution, and governance voting is live on-chain on Casper testnet.
+CasperLaunch demonstrates that real-world asset tokenization is deployable today on the Casper Network. Every critical flow including minting, trading, yield distribution, KYC compliance enforcement, and governance voting is live on-chain on Casper testnet.
 
 The business model is built on sustainable fee streams that align platform incentives with investor outcomes. The platform earns more when assets are tokenized (0.5% fee), when they trade (0.25% spread), and when they yield (5% of distributions). Compliance-as-a-Service creates recurring revenue from institutional issuers. Together these streams support a scalable business without compromising the trustless guarantees that make blockchain tokenization valuable.
 

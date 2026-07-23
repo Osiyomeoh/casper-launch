@@ -10,7 +10,7 @@
 
 ## What It Does
 
-CasperLaunch converts physical assets (property, farmland, commercial buildings) into CEP-78 NFTs on the Casper blockchain. An AI agent extracts metadata from plain language, manages on-chain KYC, mints tokens, distributes yield autonomously, and settles secondary trades, all without human intervention.
+CasperLaunch converts physical assets (property, farmland, commercial buildings) into CEP-78 NFTs on the Casper blockchain. A multi-agent AI system extracts metadata from plain language, enforces KYC compliance autonomously, mints tokens, distributes yield, and settles secondary trades — all without human intervention.
 
 Every flow is live on Casper testnet. Nothing is mocked.
 
@@ -18,13 +18,22 @@ Every flow is live on Casper testnet. Nothing is mocked.
 
 ## Agentic AI Features
 
-### 1. AI Tokenization Agent (x402-gated)
-Describe your asset in plain English. The AI (Gemini 2.0 Flash via Groq) extracts structured CEP-78 metadata and orchestrates the full minting flow. Access costs **3 CSPR paid on-chain** via the x402 micropayment protocol, the first non-EVM x402 implementation.
+### 1. AI Tokenization Agent (x402-gated, MCP-enhanced)
+
+Describe your asset in plain English. Before the AI runs, the agent queries live Casper blockchain state via the **Casper MCP Server** (Model Context Protocol): network status, latest blocks, active validators. This on-chain context is injected into the AI prompt before Groq/Gemini processes your asset description.
+
+Access costs **3 CSPR paid on-chain** via the x402 micropayment protocol — the first non-EVM x402 implementation. No payment, no AI.
 
 ### 2. Autonomous Yield Distribution Agent
-Polls the yield distributor contract continuously. When pool balance exceeds the threshold, it autonomously signs and submits a `distribute()` transaction, splitting yield proportionally to all registered holders. No human trigger required.
 
-### 3. AI-Assisted Trade Settlement
+Polls the yield distributor contract every 30 seconds. When the pool balance exceeds the threshold, it autonomously signs and submits a `distribute()` TransactionV1 — splitting yield proportionally to all registered holders. No human trigger required. Live at `/agent`.
+
+### 3. Autonomous Compliance Agent
+
+A second autonomous agent scans all token holders every 60 seconds, verifies each wallet's KYC attestation age, and autonomously calls `set_kyc(approved=false)` on-chain for any wallet whose attestation has expired (90-day window) or is missing. No human approval required. Live at `/compliance`.
+
+### 4. AI-Assisted Trade Settlement
+
 Buyer authorizes via `signMessage`. The agent verifies ownership, submits the CSPR transfer on-chain, and calls `register_holder` on the yield contract, transferring yield rights instantly.
 
 ---
@@ -57,7 +66,7 @@ Visit [casper-launch.vercel.app](https://casper-launch.vercel.app) and click **C
 - Go to `/chat`
 - Describe an asset: e.g. "A 3-bedroom apartment in Lekki Lagos worth $180,000 with 8.5% rental yield"
 - Sign the authorization popup in CasperWallet (x402 payment: 3 CSPR on-chain)
-- The AI extracts metadata, mints a CEP-78 token, registers you as holder
+- The AI fetches live Casper network context via MCP, then extracts metadata and mints a CEP-78 token
 - You receive a Casper testnet transaction hash
 
 **3. List a fractional stake**
@@ -72,9 +81,14 @@ Visit [casper-launch.vercel.app](https://casper-launch.vercel.app) and click **C
 
 **5. View yield distribution**
 - Go to `/yield` to see pool balance and distribution history
-- Go to `/agent` to watch the autonomous agent activity log
+- Go to `/agent` to watch the autonomous yield agent activity log
 
-**6. Governance**
+**6. View compliance monitoring**
+- Go to `/compliance` to see the autonomous KYC compliance agent
+- Click **Scan Now** to trigger an immediate compliance scan across all holders
+- Expired or missing KYC attestations are flagged and auto-revoked on-chain
+
+**7. Governance**
 - Go to `/governance`, create a proposal, vote, and view quorum status
 
 ---
@@ -86,11 +100,16 @@ User (CasperWallet)
         |
         v
 Next.js App (Vercel)
-  /chat   /trade   /yield   /governance   /agent
+  /chat   /trade   /yield   /governance   /agent   /compliance
         |
-        +-- Gemini AI (Groq inference)
-        +-- x402 Payment Gate
-        +-- Agent (server-side keypair, ED25519)
+        +-- Casper MCP Server (mcp.cspr.cloud)
+        |     get_network_status, get_latest_blocks, get_validators
+        |     Live on-chain context injected into AI prompts
+        |
+        +-- Groq AI (Llama 3.3 70B)
+        +-- x402 Payment Gate (3 CSPR, first non-EVM implementation)
+        +-- Yield Agent (autonomous distribute(), every 30s)
+        +-- Compliance Agent (autonomous set_kyc revocation, every 60s)
         |
         v
 Casper Testnet
@@ -109,13 +128,15 @@ Neon Postgres (off-chain state mirror)
 | Blockchain | Casper Network (Testnet) |
 | Smart Contracts | Rust / WebAssembly |
 | NFT Standard | CEP-78 |
-| AI Model | Google Gemini 2.0 Flash (Groq) |
+| AI Model | Llama 3.3 70B (Groq) |
+| Blockchain AI Context | Casper MCP Server (mcp.cspr.cloud) |
 | Payment Protocol | x402 (Casper-native, first non-EVM) |
 | Frontend | Next.js 15, TypeScript, Tailwind CSS |
 | Deployment | Vercel |
 | Database | Neon Postgres |
 | Wallet | CasperWallet |
 | Casper SDK | casper-js-sdk (TypeScript) |
+| Live Blockchain Data | CSPR.cloud API |
 
 ---
 
@@ -126,20 +147,22 @@ git clone https://github.com/Osiyomeoh/casper-launch
 cd casper-launch
 npm install
 cp .env.example .env.local
+# Fill in .env.local with your keys
 npm run dev
 ```
 
 ### Required Environment Variables
 
+See [.env.example](.env.example) for the full list. Key variables:
+
 ```
-AGENT_SECRET_KEY_PEM=         # ED25519 private key for agent transactions
-NEXT_PUBLIC_AGENT_PUBLIC_KEY= # Corresponding public key (hex)
-NEXT_PUBLIC_NFT_HASH=         # CEP-78 contract hash
-NEXT_PUBLIC_YIELD_HASH=       # Yield distributor contract hash
-NEXT_PUBLIC_ESCROW_HASH=      # Trade escrow contract hash
-NEXT_PUBLIC_GOV_HASH=         # Governance contract hash
-GROQ_API_KEY=                 # Groq API key (Gemini access)
-DATABASE_URL=                 # Neon Postgres connection string
+AGENT_SECRET_KEY_PEM=          # ED25519 private key for agent transactions
+NEXT_PUBLIC_AGENT_PUBLIC_KEY=  # Corresponding public key (hex)
+NEXT_PUBLIC_RWA_NFT_HASH=      # CEP-78 contract hash
+NEXT_PUBLIC_YIELD_HASH=        # Yield distributor contract hash
+GROQ_API_KEY=                  # Groq API key
+DATABASE_URL=                  # Neon Postgres connection string
+CSPR_CLOUD_API_KEY=            # CSPR.cloud API key (MCP + live data)
 ```
 
 ---
