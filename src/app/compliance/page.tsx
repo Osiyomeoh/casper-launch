@@ -1,7 +1,7 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import AppLayout from "../components/AppLayout";
-import Link from "next/link";
+import type { ComplianceState, ComplianceFlag } from "@/lib/compliance-store";
 
 type AuditEvent = {
   type: "mint" | "trade" | "listing";
@@ -19,148 +19,301 @@ type AuditEvent = {
 
 const TYPE_ICON: Record<string, string> = { mint: "token", trade: "swap_horiz", listing: "sell" };
 const TYPE_LABEL: Record<string, string> = { mint: "MINT", trade: "TRADE", listing: "LISTING" };
-const TYPE_COLOR: Record<string, string> = { mint: "text-[#64FFDA] border-[#64FFDA]/20 bg-[#64FFDA]/10", trade: "text-[#00C853] border-[#00C853]/20 bg-[#00C853]/10", listing: "text-[#FFD600] border-[#FFD600]/20 bg-[#FFD600]/10" };
+const TYPE_COLOR: Record<string, string> = {
+  mint: "text-[#64FFDA] border-[#64FFDA]/20 bg-[#64FFDA]/10",
+  trade: "text-[#00C853] border-[#00C853]/20 bg-[#00C853]/10",
+  listing: "text-[#FFD600] border-[#FFD600]/20 bg-[#FFD600]/10",
+};
 
-const statusColor = (s: string) =>
-  s === "confirmed" ? "text-[#00C853] border-[#00C853]/20 bg-[#00C853]/10" :
-  s === "pending"   ? "text-[#FFD600] border-[#FFD600]/20 bg-[#FFD600]/10" :
-  s === "failed"    ? "text-[#FF0000] border-[#FF0000]/20 bg-[#FF0000]/10" :
-                      "text-[#abb9d6] border-[#abb9d6]/20 bg-[#abb9d6]/10";
+const LEVEL_COLOR: Record<string, string> = {
+  info: "#abb9d6", success: "#64FFDA", warn: "#FFD600", error: "#FF6B6B",
+};
+const LEVEL_ICON: Record<string, string> = {
+  info: "info", success: "check_circle", warn: "warning", error: "error",
+};
+const REASON_LABEL: Record<string, string> = {
+  kyc_expired: "KYC Expired",
+  kyc_missing: "KYC Missing",
+  kyc_revoked: "KYC Revoked",
+};
+const REASON_COLOR: Record<string, string> = {
+  kyc_expired: "text-[#FF6B6B] bg-[#FF6B6B]/10 border-[#FF6B6B]/20",
+  kyc_missing: "text-[#FFD600] bg-[#FFD600]/10 border-[#FFD600]/20",
+  kyc_revoked: "text-[#abb9d6] bg-[#abb9d6]/10 border-[#abb9d6]/20",
+};
+
+function fmt(ts: number) {
+  return new Date(ts).toLocaleTimeString("en-US", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" });
+}
+function fmtDate(ts: number) {
+  return new Date(ts).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+function shortKey(k: string) { return k.slice(0, 8) + "…" + k.slice(-6); }
 
 export default function CompliancePage() {
-  const [events, setEvents] = useState<AuditEvent[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [copied, setCopied] = useState<string | null>(null);
-  const [filter, setFilter] = useState<"all" | "mint" | "trade" | "listing">("all");
+  const [agent, setAgent] = useState<ComplianceState | null>(null);
+  const [actionLoading, setActionLoading] = useState(false);
+  const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
 
-  useEffect(() => {
-    fetch("/api/compliance")
-      .then(r => r.json()).then(setEvents).catch(() => {}).finally(() => setLoading(false));
+  const fetchAgent = useCallback(async () => {
+    try {
+      const res = await fetch("/api/agent/compliance-status");
+      if (res.ok) setAgent(await res.json());
+    } catch {}
   }, []);
 
-  function copyHash(hash: string) {
-    navigator.clipboard.writeText(hash);
-    setCopied(hash); setTimeout(() => setCopied(null), 2000);
+  const fetchAudit = useCallback(async () => {
+    try {
+      const res = await fetch("/api/compliance/audit");
+      if (res.ok) setAuditEvents(await res.json());
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    fetchAgent();
+    fetchAudit();
+    const agentInterval = setInterval(fetchAgent, 5000);
+    return () => clearInterval(agentInterval);
+  }, [fetchAgent, fetchAudit]);
+
+  async function handleToggle() {
+    if (!agent) return;
+    setActionLoading(true);
+    try {
+      const action = agent.running ? "stop" : "start";
+      const res = await fetch("/api/agent/compliance-monitor", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
+      });
+      if (res.ok) setAgent(await res.json());
+    } finally {
+      setActionLoading(false);
+    }
   }
 
-  const filtered = filter === "all" ? events : events.filter(e => e.type === filter);
-  const confirmed = events.filter(e => e.status === "confirmed").length;
-  const trades = events.filter(e => e.type === "trade").length;
-  const verRate = events.length ? Math.round((confirmed / events.length) * 100) : null;
+  async function handleScanNow() {
+    setActionLoading(true);
+    try {
+      const res = await fetch("/api/agent/compliance-monitor");
+      if (res.ok) setAgent(await res.json());
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
+  const openFlags = (agent?.flags ?? []).filter((f: ComplianceFlag) => !f.resolvedAt);
+  const resolvedFlags = (agent?.flags ?? []).filter((f: ComplianceFlag) => f.resolvedAt);
+  const logs = agent?.logs ?? [];
 
   return (
-    <AppLayout title="Compliance & Audit">
-      <div className="p-4 md:p-8 space-y-6">
+    <AppLayout title="Compliance">
+      <div className="max-w-4xl mx-auto px-4 md:px-8 py-6 md:py-10 space-y-6">
+
+        {/* Header */}
         <div>
-          <h1 className="text-2xl md:text-3xl font-bold text-[#d8e2ff]">Compliance & Audit</h1>
-          <p className="text-sm text-[#abb9d6] mt-1">Every agent action is recorded on-chain and auditable in real time.</p>
+          <h1 className="text-2xl md:text-3xl font-bold text-[#d8e2ff]">Compliance Agent</h1>
+          <p className="text-sm text-[#abb9d6] mt-1">
+            Autonomous KYC monitor — scans all token holders every 60s, flags expired or missing attestations, and autonomously revokes on-chain access for non-compliant wallets.
+          </p>
         </div>
 
-        {/* KPI cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-          {[
-            { label: "Events Logged", value: loading ? "…" : events.length.toString(), sub: `${confirmed} confirmed`, icon: "visibility", color: "" },
-            { label: "Mints", value: loading ? "…" : events.filter(e => e.type === "mint").length.toString(), sub: "CEP-78 tokens", icon: "token", color: "text-[#64FFDA]" },
-            { label: "Trades Settled", value: loading ? "…" : trades.toString(), sub: "yield transfers", icon: "swap_horiz", color: "text-[#00C853]" },
-            { label: "Verification Rate", value: loading ? "…" : verRate !== null ? `${verRate}%` : "—", sub: "on-chain confirmed", icon: "verified_user", color: "" },
-          ].map(card => (
-            <div key={card.label} className="rounded-xl p-5 relative overflow-hidden bg-[#112240] border border-[rgba(255,255,255,0.05)]">
-              <div className="absolute top-3 right-3 opacity-10">
-                <span className="material-symbols-outlined text-5xl text-[#ffb4a8]">{card.icon}</span>
-              </div>
-              <p className="font-mono text-[10px] uppercase tracking-wider text-[#ebbbb4]">{card.label}</p>
-              <h3 className={`text-3xl font-bold mt-2 ${card.color || "text-[#d8e2ff]"}`}>{card.value}</h3>
-              <p className="mt-3 text-xs text-[#abb9d6]">{card.sub}</p>
+        {/* Status cards */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="bg-[#091b39] border border-[rgba(100,255,218,0.12)] rounded-xl p-4">
+            <div className="text-xs font-mono text-[#abb9d6] uppercase tracking-wider mb-1">Status</div>
+            <div className="flex items-center gap-2">
+              <span className={`w-2 h-2 rounded-full ${agent?.running ? "bg-[#00C853] animate-pulse" : "bg-[#FF6B6B]"}`} />
+              <span className="text-sm font-bold text-[#d8e2ff]">{agent?.running ? "Running" : "Stopped"}</span>
             </div>
-          ))}
-        </div>
-
-        {/* Filter tabs */}
-        <div className="flex gap-2">
-          {(["all", "mint", "trade", "listing"] as const).map(f => (
-            <button key={f} onClick={() => setFilter(f)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold border transition-all ${filter === f ? "border-[#64FFDA] bg-[#64FFDA]/10 text-[#64FFDA]" : "border-[rgba(100,255,218,0.15)] text-[#abb9d6] hover:border-[#64FFDA]/30"}`}>
-              {f.toUpperCase()}
-            </button>
-          ))}
-        </div>
-
-        {/* Audit log */}
-        <div className="bg-[#091b39] border border-[rgba(100,255,218,0.12)] rounded-xl overflow-hidden">
-          <div className="px-5 py-3 border-b border-[rgba(100,255,218,0.1)] flex justify-between items-center">
-            <h4 className="font-bold text-sm text-[#d8e2ff]">Audit Log</h4>
-            <span className="bg-[#64FFDA]/10 text-[#64FFDA] text-[10px] px-2 py-0.5 rounded font-mono border border-[#64FFDA]/20">LIVE</span>
           </div>
 
-          {loading ? (
-            <div className="p-10 text-center text-sm text-[#abb9d6]">Loading…</div>
-          ) : filtered.length === 0 ? (
-            <div className="p-10 text-center space-y-3">
-              <span className="material-symbols-outlined text-[#abb9d6] text-4xl">receipt_long</span>
-              <div className="text-sm text-[#abb9d6]">No {filter === "all" ? "" : filter} events yet — mint an asset or complete a trade.</div>
+          <div className="bg-[#091b39] border border-[rgba(100,255,218,0.12)] rounded-xl p-4">
+            <div className="text-xs font-mono text-[#abb9d6] uppercase tracking-wider mb-1">Scans</div>
+            <div className="text-sm font-bold text-[#d8e2ff]">{agent?.totalRuns ?? 0}</div>
+          </div>
+
+          <div className="bg-[#091b39] border border-[rgba(255,107,107,0.3)] rounded-xl p-4">
+            <div className="text-xs font-mono text-[#abb9d6] uppercase tracking-wider mb-1">Open Flags</div>
+            <div className="text-sm font-bold text-[#FF6B6B]">{openFlags.length}</div>
+          </div>
+
+          <div className="bg-[#091b39] border border-[rgba(100,255,218,0.12)] rounded-xl p-4">
+            <div className="text-xs font-mono text-[#abb9d6] uppercase tracking-wider mb-1">Revocations</div>
+            <div className="text-sm font-bold text-[#64FFDA]">{agent?.totalRevocations ?? 0}</div>
+          </div>
+        </div>
+
+        {/* How it works banner */}
+        <div className="bg-[#091b39] border border-[rgba(100,255,218,0.15)] rounded-xl p-4">
+          <div className="flex items-start gap-3">
+            <span className="material-symbols-outlined text-[#64FFDA] text-[20px] mt-0.5">policy</span>
+            <div>
+              <div className="text-sm font-bold text-[#64FFDA] mb-1">Autonomous KYC Enforcement</div>
+              <div className="text-xs text-[#abb9d6] leading-relaxed">
+                Every 60 seconds the agent queries all on-chain token holders, verifies their KYC attestation timestamp, and autonomously calls{" "}
+                <code className="font-mono text-[#d8e2ff]">set_kyc(approved=false)</code> for any wallet whose attestation has expired (90-day window) or is missing. No human approval required.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Controls */}
+        <div className="flex gap-3">
+          <button
+            onClick={handleToggle}
+            disabled={actionLoading}
+            className={`px-5 py-2.5 rounded-lg text-sm font-bold transition-all active:scale-95 disabled:opacity-50 ${
+              agent?.running
+                ? "bg-[#FF6B6B]/10 border border-[#FF6B6B]/30 text-[#FF6B6B] hover:bg-[#FF6B6B]/20"
+                : "bg-[#64FFDA]/10 border border-[#64FFDA]/30 text-[#64FFDA] hover:bg-[#64FFDA]/20"
+            }`}
+          >
+            {actionLoading ? "..." : agent?.running ? "Stop Agent" : "Start Agent"}
+          </button>
+
+          <button
+            onClick={handleScanNow}
+            disabled={actionLoading}
+            className="px-5 py-2.5 rounded-lg text-sm font-bold bg-[#192a48] border border-[rgba(100,255,218,0.2)] text-[#d8e2ff] hover:bg-[#253458] transition-all active:scale-95 disabled:opacity-50"
+          >
+            Scan Now
+          </button>
+        </div>
+
+        {/* Open flags */}
+        {openFlags.length > 0 && (
+          <div className="bg-[#091b39] border border-[rgba(255,107,107,0.2)] rounded-xl overflow-hidden">
+            <div className="flex items-center gap-2 px-4 py-3 border-b border-[rgba(255,107,107,0.1)]">
+              <span className="material-symbols-outlined text-[#FF6B6B] text-[18px]">flag</span>
+              <span className="text-sm font-bold text-[#FF6B6B]">Active Compliance Flags</span>
+              <span className="ml-auto text-xs font-mono bg-[#FF6B6B]/10 text-[#FF6B6B] px-2 py-0.5 rounded">{openFlags.length}</span>
+            </div>
+            <div className="divide-y divide-[rgba(255,107,107,0.08)]">
+              {openFlags.map((f, i) => (
+                <div key={i} className="px-4 py-3 flex items-center gap-3">
+                  <span className="material-symbols-outlined text-[#FF6B6B] text-[16px]">gpp_bad</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs font-mono text-[#d8e2ff]">{shortKey(f.wallet)}</div>
+                    <div className="text-xs text-[#abb9d6] mt-0.5">Flagged {fmtDate(f.flaggedAt)}</div>
+                  </div>
+                  <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border ${REASON_COLOR[f.reason]}`}>
+                    {REASON_LABEL[f.reason]}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Resolved flags */}
+        {resolvedFlags.length > 0 && (
+          <div className="bg-[#091b39] border border-[rgba(100,255,218,0.12)] rounded-xl overflow-hidden">
+            <div className="flex items-center gap-2 px-4 py-3 border-b border-[rgba(100,255,218,0.08)]">
+              <span className="material-symbols-outlined text-[#64FFDA] text-[18px]">verified</span>
+              <span className="text-sm font-bold text-[#d8e2ff]">Resolved — KYC Revoked On-Chain</span>
+            </div>
+            <div className="divide-y divide-[rgba(100,255,218,0.05)]">
+              {resolvedFlags.map((f, i) => (
+                <div key={i} className="px-4 py-3 flex items-center gap-3">
+                  <span className="material-symbols-outlined text-[#64FFDA] text-[16px]">check_circle</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs font-mono text-[#d8e2ff]">{shortKey(f.wallet)}</div>
+                    {f.txHash && (
+                      <a
+                        href={`https://testnet.cspr.live/deploy/${f.txHash}`}
+                        target="_blank" rel="noopener noreferrer"
+                        className="text-[10px] font-mono text-[#64FFDA] hover:underline"
+                      >
+                        {f.txHash.slice(0, 16)}…
+                      </a>
+                    )}
+                  </div>
+                  <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border ${REASON_COLOR[f.reason]}`}>
+                    {REASON_LABEL[f.reason]}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Agent log */}
+        <div className="bg-[#091b39] border border-[rgba(100,255,218,0.12)] rounded-xl overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-[rgba(100,255,218,0.08)]">
+            <span className="text-sm font-bold text-[#d8e2ff]">Agent Log</span>
+            <span className="text-xs font-mono text-[#abb9d6]">live • refreshes every 5s</span>
+          </div>
+          {logs.length === 0 ? (
+            <div className="px-4 py-8 text-center text-[#abb9d6] text-sm">
+              No activity yet — start the agent or click Scan Now
             </div>
           ) : (
-            <div className="divide-y divide-[rgba(100,255,218,0.06)]">
-              {filtered.map(e => (
-                <div key={e.id} className="px-5 py-4 space-y-2">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="material-symbols-outlined text-[#64FFDA] text-[16px] shrink-0" style={{ fontVariationSettings: "'FILL' 1" }}>{TYPE_ICON[e.type]}</span>
-                      <div className="min-w-0">
-                        <Link href={`/assets/${e.tokenId}`} className="text-sm font-bold text-[#d8e2ff] hover:underline truncate block">{e.assetName}</Link>
-                        <p className="text-[10px] font-mono text-[#abb9d6]">{new Date(e.ts).toLocaleString()}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <span className={`text-[9px] font-mono border px-1.5 py-0.5 rounded ${TYPE_COLOR[e.type]}`}>{TYPE_LABEL[e.type]}</span>
-                      <span className={`text-[9px] font-mono border px-1.5 py-0.5 rounded-full ${statusColor(e.status)}`}>{e.status.toUpperCase()}</span>
-                    </div>
+            <div className="divide-y divide-[rgba(100,255,218,0.05)] max-h-[380px] overflow-y-auto">
+              {logs.map((entry, i) => (
+                <div key={i} className="flex items-start gap-3 px-4 py-2.5">
+                  <span
+                    className="material-symbols-outlined text-[16px] mt-0.5 shrink-0"
+                    style={{ color: LEVEL_COLOR[entry.level] }}
+                  >
+                    {LEVEL_ICON[entry.level]}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <span className="text-xs text-[#abb9d6] font-mono mr-2">{fmt(entry.ts)}</span>
+                    <span className="text-sm" style={{ color: LEVEL_COLOR[entry.level] }}>{entry.message}</span>
+                    {entry.wallet && (
+                      <div className="text-xs font-mono text-[#abb9d6] mt-0.5">{shortKey(entry.wallet)}</div>
+                    )}
+                    {entry.txHash && (
+                      <a
+                        href={`https://testnet.cspr.live/deploy/${entry.txHash}`}
+                        target="_blank" rel="noopener noreferrer"
+                        className="block text-xs font-mono text-[#64FFDA] hover:underline mt-0.5 truncate"
+                      >
+                        {entry.txHash}
+                      </a>
+                    )}
                   </div>
-
-                  {/* Trade details */}
-                  {e.meta && (
-                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-[10px] font-mono text-[#abb9d6]">
-                      <span>Yield: <span className="text-[#64FFDA]">{e.meta.bps / 100}%</span></span>
-                      <span>CSPR: <span className="text-[#64FFDA]">{e.meta.cspr.toFixed(2)}</span></span>
-                      {e.meta.seller && <span>Seller: <span className="text-[#d8e2ff]">{e.meta.seller.slice(0, 10)}…</span></span>}
-                      {e.meta.buyer && <span>Buyer: <span className="text-[#d8e2ff]">{e.meta.buyer.slice(0, 10)}…</span></span>}
-                    </div>
-                  )}
-
-                  {/* Hash row */}
-                  {e.hash && (
-                    <div className="flex items-center gap-2 text-[10px] font-mono text-[#abb9d6]">
-                      <span className="material-symbols-outlined text-[12px]">tag</span>
-                      <a href={`https://testnet.cspr.live/deploy/${e.hash}`} target="_blank" rel="noopener noreferrer"
-                        className="text-[#64FFDA] hover:underline">{e.hash.slice(0, 14)}…{e.hash.slice(-8)}</a>
-                    </div>
-                  )}
-
-                  {/* Document hash */}
-                  {e.documentHash && (
-                    <div className="flex items-center gap-2 text-[10px] font-mono bg-[#112240] rounded-lg px-3 py-2">
-                      <span className="material-symbols-outlined text-[#64FFDA] text-[12px]">fingerprint</span>
-                      <span className="text-[#abb9d6] truncate flex-1">{e.documentHash.slice(0, 24)}…</span>
-                      <button onClick={() => copyHash(e.documentHash!)} className="shrink-0 text-[#abb9d6] hover:text-[#64FFDA]">
-                        <span className="material-symbols-outlined text-[13px]">{copied === e.documentHash ? "check" : "content_copy"}</span>
-                      </button>
-                      <Link href={`/verify?hash=${e.documentHash}`} className="shrink-0 text-[#64FFDA] hover:underline">verify →</Link>
-                    </div>
-                  )}
                 </div>
               ))}
             </div>
           )}
         </div>
 
-        <div className="bg-[#091b39] border border-[rgba(100,255,218,0.12)] rounded-xl p-4 flex items-start gap-3">
-          <span className="material-symbols-outlined text-[#64FFDA] text-[20px] mt-0.5">info</span>
-          <p className="text-xs text-[#abb9d6] leading-relaxed">
-            All mint, trade, and yield events are verifiable on{" "}
-            <a href="https://testnet.cspr.live" target="_blank" rel="noopener noreferrer" className="text-[#64FFDA] hover:underline">testnet.cspr.live</a>.
-            Document hashes are SHA-256 fingerprints anchored at mint time.
-          </p>
-        </div>
+        {/* Audit trail */}
+        {auditEvents.length > 0 && (
+          <div className="bg-[#091b39] border border-[rgba(100,255,218,0.12)] rounded-xl overflow-hidden">
+            <div className="flex items-center gap-2 px-4 py-3 border-b border-[rgba(100,255,218,0.08)]">
+              <span className="material-symbols-outlined text-[#64FFDA] text-[18px]">receipt_long</span>
+              <span className="text-sm font-bold text-[#d8e2ff]">On-Chain Audit Trail</span>
+            </div>
+            <div className="divide-y divide-[rgba(100,255,218,0.05)] max-h-[360px] overflow-y-auto">
+              {auditEvents.map((ev) => (
+                <div key={ev.id} className="px-4 py-3 flex items-start gap-3">
+                  <span className="material-symbols-outlined text-[16px] mt-0.5 text-[#64FFDA]">{TYPE_ICON[ev.type]}</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded border ${TYPE_COLOR[ev.type]}`}>
+                        {TYPE_LABEL[ev.type]}
+                      </span>
+                      <span className="text-xs text-[#d8e2ff] font-medium truncate">{ev.assetName}</span>
+                      <span className="text-[10px] text-[#abb9d6] font-mono ml-auto">{fmtDate(ev.ts)}</span>
+                    </div>
+                    <div className="text-xs text-[#abb9d6] mt-1 font-mono">{shortKey(ev.actor)}</div>
+                    <a
+                      href={`https://testnet.cspr.live/deploy/${ev.hash}`}
+                      target="_blank" rel="noopener noreferrer"
+                      className="text-[10px] font-mono text-[#64FFDA] hover:underline truncate block"
+                    >
+                      {ev.hash.slice(0, 16)}…
+                    </a>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
       </div>
     </AppLayout>
   );
