@@ -116,7 +116,7 @@ export async function runMcpTools(publicKey: string, nftContractHash: string): P
   await Promise.all([
     run("get_network_status", {}),
     run("get_latest_blocks", { page_size: 3 }),
-    run("get_era_summary", { era_id: 0 }),
+    run("get_rich_list", { page: 1, page_size: 3 }),
     run("get_validators", { page: 1, page_size: 5 }),
   ]);
 
