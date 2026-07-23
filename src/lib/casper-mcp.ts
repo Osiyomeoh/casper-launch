@@ -114,10 +114,10 @@ export async function runMcpTools(publicKey: string, nftContractHash: string): P
   };
 
   await Promise.all([
-    run("get_account_balance", { account_identifier: publicKey }),
-    run("get_account_nfts", { account_identifier: publicKey, page: 1, page_size: 5 }),
     run("get_network_status", {}),
-    run("get_contract", { contract_hash: nftContractHash }),
+    run("get_latest_blocks", { page_size: 3 }),
+    run("get_current_currency_rate", { currency_id: "usd" }),
+    run("get_validators", { page: 1, page_size: 5 }),
   ]);
 
   return calls;
