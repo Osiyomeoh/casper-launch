@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { buildPaymentRequirement, parsePaymentHeader, verifyPayment } from "@/lib/x402";
 import { runMcpTools, mcpGetCsprRate } from "@/lib/casper-mcp";
 
-const NFT_CONTRACT_HASH = process.env.NEXT_PUBLIC_RWA_NFT_HASH ?? "";
+const NFT_CONTRACT_HASH = process.env.NEXT_PUBLIC_RWA_NFT_HASH ?? "0a8b5373f27de8ff8d3545c2d463de0052135d900c37c6a9654f1ea7de9896f7";
 
 const SYSTEM_PROMPT = `You are a real-world asset (RWA) tokenization specialist for CasperLaunch.
 You have access to live Casper blockchain data fetched via the Casper MCP Server before this request ran.
